@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101113" />
+    <title>Afterframe — Discover films</title>
+    <meta
+      name="description"
+      content="Discover films and browse Tamil and dubbed series by season and episode."
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a href="#main" class="skip">Skip to content</a>
+    <header class="mast">
+      <div class="mast-inner">
+        <a class="brand" href="/" aria-label="Afterframe home"
+          ><i class="mark" aria-hidden="true"></i>Afterframe</a
+        >
+        <nav class="main-nav" aria-label="Main navigation">
+          <a id="discover-nav" href="/">Discover</a
+          ><a id="browse-nav" href="/movies">Browse</a
+          ><a id="series-nav" href="/series">Series</a>
+        </nav>
+        <form role="search" class="search" action="/search">
+          <i class="glass" aria-hidden="true"></i
+          ><input
+            name="q"
+            id="query"
+            type="search"
+            maxlength="120"
+            placeholder="Search films…"
+            aria-label="Search films"
+            aria-controls="suggestions"
+            autocomplete="off"
+            required
+          /><kbd>/</kbd>
+          <div id="suggestions" class="suggestions" hidden></div>
+        </form>
+        <button
+          id="theme"
+          class="iconbtn"
+          aria-label="Change color theme"
+        ></button>
+      </div>
+    </header>
+    <main id="main" class="shell" tabindex="-1"></main>
+    <noscript>Enable JavaScript to browse the movie catalogue.</noscript>
+    <footer class="shell foot">
+      <a class="brand" href="/"
+        ><i class="mark" aria-hidden="true"></i>Afterframe</a
+      >
+    </footer>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
+</html>
