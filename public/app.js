@@ -167,7 +167,6 @@ function buildHeroSlideshow(items) {
         kind: item.kind || 'movie'
       })).then(artData => {
         if (!artData) return;
-        setThumbnail(artData.image || artData.backdrop);
         // 1. High-res backdrop or poster
         const bgUrl = artData.backdrop || artData.image;
         if (bgUrl && /^https:\/\//.test(bgUrl)) {

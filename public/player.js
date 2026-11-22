@@ -125,7 +125,7 @@ function doWrap(video, videoWrap) {
   }, { once: true });
 }
 
-/* ─── In-Player Quality Switcher — Submenu with Back button & Checkmark ──── */
+/* ─── In-Player Quality Switcher — Native Video.js 10 Menu Integration ──── */
 function setupInPlayerQuality(video, skin) {
 
   // Seamless resume when src changes due to quality switch
@@ -150,99 +150,26 @@ function setupInPlayerQuality(video, skin) {
     }
   });
 
-  // Track injected state so we can reinject on shadow DOM changes
-  let injected = false;
-  let observer = null;
-  let renderQualityGear = null; // hoisted ref, set after injectQuality runs
-
-  function injectQuality() {
+  function renderQualityMenu() {
     const sr = skin.shadowRoot;
-    if (!sr) {
-      setTimeout(injectQuality, 100);
-      return;
-    }
+    if (!sr) return;
 
-    const speedText = sr.querySelector('media-menu-item media-text[token="menu.speed"]');
-    const speedItem = speedText?.closest('media-menu-item') || sr.querySelector('media-menu-item[commandfor]');
-    if (!speedItem) {
-      setTimeout(injectQuality, 100);
-      return;
-    }
+    const quals = window.__movieQualities || [];
+    const activeQ = quals.find(q => q.active) || quals[0];
 
-    // Watch for shadow DOM mutations so we can re-inject if Video.js re-renders after Play
-    if (!observer) {
-      observer = new MutationObserver(() => {
-        const sr2 = skin.shadowRoot;
-        if (!sr2) return;
-        // If our trigger was removed from the shadow DOM, re-inject
-        const anyMenu = sr2.querySelector('media-menu-content');
-        if (anyMenu && !anyMenu.querySelector('.af-quality-trigger-item')) {
-          injected = false;
-          injectQuality();
-        }
-      });
-      observer.observe(sr, { childList: true, subtree: true });
-    }
-    injected = true;
-
-    // Styles for custom submenu & trigger matching native Video.js menu
+    // Ensure CSS styles for custom quality items inside the shadow root
     if (!sr.querySelector('#af-gear-quality-style')) {
       const style = document.createElement('style');
       style.id = 'af-gear-quality-style';
       style.textContent = `
-        .af-quality-trigger-item {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 10px 14px;
-          cursor: pointer;
-          color: rgba(255, 255, 255, 0.85);
-          font-size: 14px;
-          font-family: inherit;
-          transition: background 0.12s;
-          border-radius: 6px;
-        }
-        .af-quality-trigger-item:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #fff;
-        }
-        .af-quality-trigger-left {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .af-quality-trigger-right {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          color: rgba(255, 255, 255, 0.5);
-          font-size: 13px;
-        }
-        .af-quality-submenu {
+        .af-qi-box {
           display: flex;
           flex-direction: column;
           padding: 4px 0;
+          max-height: 240px;
+          overflow-y: auto;
         }
-        .af-quality-back-btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          font-size: 14px;
-          font-weight: 600;
-          color: #fff;
-          background: none;
-          border: none;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          cursor: pointer;
-          text-align: left;
-          width: 100%;
-          font-family: inherit;
-        }
-        .af-quality-back-btn:hover {
-          background: rgba(255, 255, 255, 0.08);
-        }
-        .af-quality-option {
+        .af-qi-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -256,16 +183,17 @@ function setupInPlayerQuality(video, skin) {
           text-align: left;
           font-family: inherit;
           transition: background 0.12s;
+          border-radius: 6px;
         }
-        .af-quality-option:hover {
+        .af-qi-item:hover {
           background: rgba(255, 255, 255, 0.1);
           color: #fff;
         }
-        .af-quality-option.active {
+        .af-qi-item.active {
           color: #fff;
           font-weight: 600;
         }
-        .af-quality-check {
+        .af-qi-check {
           color: var(--media-primary-color, #ff6b3d);
           font-size: 16px;
           font-weight: 700;
@@ -274,133 +202,156 @@ function setupInPlayerQuality(video, skin) {
       sr.appendChild(style);
     }
 
-    const menuPopup = speedItem.closest('media-menu') || speedItem.parentNode;
-    const topContent = speedItem.closest('media-menu-content') || speedItem.parentNode;
+    // 1. Try to find the built-in Video.js 10 Quality menu item
+    const qualityText = sr.querySelector('media-text[token="menu.quality"]');
+    let qualityItem = qualityText?.closest('media-menu-item');
+    let qualityContent = null;
 
-    // Clean up any old quality row
-    const oldRow = topContent.querySelector('.af-gear-quality-row');
-    if (oldRow) oldRow.remove();
-
-    // Build or get trigger item
-    let trigger = topContent.querySelector('.af-quality-trigger-item');
-    if (!trigger) {
-      trigger = document.createElement('div');
-      trigger.className = 'af-quality-trigger-item';
-      topContent.insertBefore(trigger, speedItem);
-    }
-
-    // Build or get submenu container
-    let submenu = menuPopup.querySelector('.af-quality-submenu');
-    if (!submenu) {
-      submenu = document.createElement('div');
-      submenu.className = 'af-quality-submenu';
-      submenu.style.display = 'none';
-      menuPopup.appendChild(submenu);
-    }
-
-    function showSubmenu() {
-      topContent.style.display = 'none';
-      submenu.style.display = 'flex';
-    }
-
-    function showMainMenu() {
-      submenu.style.display = 'none';
-      topContent.style.display = '';
-    }
-
-    trigger.onclick = (e) => {
-      e.stopPropagation();
-      showSubmenu();
-    };
-
-    function renderQualityGearInner() {
-      let quals = window.__movieQualities;
-      if (!quals || quals.length <= 1) {
-        trigger.style.display = 'none';
-        showMainMenu();
-        return;
+    if (qualityItem) {
+      const contentId = qualityItem.getAttribute('commandfor');
+      if (contentId) {
+        try {
+          qualityContent = sr.querySelector(`[id="${contentId}"]`);
+        } catch {
+          qualityContent = null;
+        }
       }
-      trigger.style.display = 'flex';
-      const activeQ = quals.find(q => q.active) || quals[0];
+      if (!qualityContent) {
+        qualityContent = sr.querySelector('media-menu-content media-quality-radio-group')?.closest('media-menu-content') || null;
+      }
+    }
 
-      // Update main menu trigger row (Quality  360p >)
-      trigger.innerHTML = `
-        <span class="af-quality-trigger-left">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Quality
-        </span>
-        <span class="af-quality-trigger-right">
-          <span>${activeQ ? activeQ.name : ''}</span>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
-        </span>
-      `;
+    // 2. If built-in item not found, create one next to Speed item using native commandfor
+    if (!qualityItem) {
+      const speedText = sr.querySelector('media-text[token="menu.speed"]');
+      const speedItem = speedText?.closest('media-menu-item') || sr.querySelector('media-menu-item[commandfor]');
+      if (!speedItem) return;
 
-      // Render submenu page (< Quality, options list with checkmarks)
-      submenu.innerHTML = `
-        <button type="button" class="af-quality-back-btn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
-          Quality
-        </button>
-        <div class="af-quality-options-list"></div>
-      `;
+      const menuPopup = speedItem.closest('media-menu') || speedItem.parentNode;
+      const topContent = speedItem.closest('media-menu-content') || speedItem.parentNode;
 
-      submenu.querySelector('.af-quality-back-btn').onclick = (e) => {
-        e.stopPropagation();
-        showMainMenu();
-      };
-
-      const optionsBox = submenu.querySelector('.af-quality-options-list');
-      quals.forEach(q => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'af-quality-option' + (q.active ? ' active' : '');
-        btn.innerHTML = `
-          <span>${esc(q.name)}</span>
-          <span class="af-quality-check" style="${q.active ? '' : 'visibility:hidden'}">✓</span>
+      qualityItem = topContent.querySelector('.af-custom-quality-trigger');
+      if (!qualityItem) {
+        qualityItem = document.createElement('media-menu-item');
+        qualityItem.className = 'media-menu-trigger-item af-custom-quality-trigger';
+        qualityItem.setAttribute('commandfor', 'af-quality-content');
+        qualityItem.innerHTML = `
+          <media-icon name="switches" class="media-menu-trigger-item-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </media-icon>
+          <media-text>Quality</media-text>
+          <span class="media-menu-hint">
+            <span class="media-menu-hint-label"></span>
+            <media-icon name="chevron" class="media-menu-forward-chevron">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
+            </media-icon>
+          </span>
         `;
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          if (q.active) {
-            showMainMenu();
-            return;
-          }
+        topContent.insertBefore(qualityItem, speedItem);
+      }
+
+      qualityContent = menuPopup.querySelector('#af-quality-content');
+      if (!qualityContent) {
+        qualityContent = document.createElement('media-menu-content');
+        qualityContent.className = 'media-menu-content';
+        qualityContent.id = 'af-quality-content';
+        qualityContent.innerHTML = `
+          <media-menu-item class="media-menu-back-item">
+            <media-icon name="chevron" class="media-menu-back-chevron">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
+            </media-icon>
+            <media-text>Quality</media-text>
+          </media-menu-item>
+          <media-menu-separator class="media-menu-separator"></media-menu-separator>
+        `;
+        menuPopup.appendChild(qualityContent);
+      }
+    }
+
+    if (!qualityItem || !qualityContent) return;
+
+    // Show/hide Quality item depending on whether options are available
+    if (quals.length <= 1) {
+      qualityItem.style.display = 'none';
+      qualityItem.setAttribute('hidden', '');
+      return;
+    }
+
+    qualityItem.style.display = 'flex';
+    qualityItem.removeAttribute('hidden');
+
+    // Prevent Video.js 10 from re-hiding the Quality item
+    if (!qualityItem._afObserved) {
+      qualityItem._afObserved = true;
+      const obs = new MutationObserver(() => {
+        const qList = window.__movieQualities || [];
+        if (qList.length > 1 && qualityItem.hasAttribute('hidden')) {
+          qualityItem.removeAttribute('hidden');
+          qualityItem.style.display = 'flex';
+        }
+      });
+      obs.observe(qualityItem, { attributes: true, attributeFilter: ['hidden', 'style'] });
+    }
+
+    // Update active quality label hint on the main menu trigger
+    const hint = qualityItem.querySelector('.media-menu-hint-label') || qualityItem.querySelector('[data-part="value"]');
+    if (hint) {
+      hint.textContent = activeQ ? activeQ.name : '';
+    }
+
+    // Populate options inside qualityContent
+    let optBox = qualityContent.querySelector('.af-qi-box');
+    if (!optBox) {
+      optBox = document.createElement('div');
+      optBox.className = 'af-qi-box';
+      // Append right after separator or at the end
+      const sep = qualityContent.querySelector('media-menu-separator');
+      if (sep && sep.nextSibling) {
+        qualityContent.insertBefore(optBox, sep.nextSibling);
+      } else {
+        qualityContent.appendChild(optBox);
+      }
+    }
+    optBox.innerHTML = '';
+
+    quals.forEach(q => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'af-qi-item' + (q.active ? ' active' : '');
+      btn.innerHTML = `
+        <span class="af-qi-name">${esc(q.name)}</span>
+        <span class="af-qi-check" style="${q.active ? '' : 'visibility:hidden'}">✓</span>
+      `;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (!q.active) {
           const curTime = video.currentTime;
           const wasPlay = !video.paused;
           video.dataset.pendingResume = String(curTime);
           video.dataset.pendingPlay   = String(wasPlay);
           q.select();
-          showMainMenu();
-        };
-        optionsBox.appendChild(btn);
-      });
-    }
-
-    renderQualityGear = renderQualityGearInner;
-    renderQualityGearInner();
-    window.addEventListener('af:qualities-updated', renderQualityGearInner);
-    window.addEventListener('af:quality-changed', renderQualityGearInner);
-    setTimeout(renderQualityGearInner, 400);
-    setTimeout(renderQualityGearInner, 1200);
+        }
+        // Go back to main menu
+        try {
+          const backBtn = qualityContent.querySelector('.media-menu-back-item');
+          if (backBtn) {
+            backBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          }
+        } catch {}
+      };
+      optBox.appendChild(btn);
+    });
   }
 
-  setTimeout(injectQuality, 250);
+  // Initial and reactive updates
+  setTimeout(renderQualityMenu, 200);
+  setTimeout(renderQualityMenu, 600);
+  setTimeout(renderQualityMenu, 1500);
 
-  // Return a reinject function so caller can trigger re-injection after Play
-  return function reinjectQuality() {
-    if (!injected) {
-      injectQuality();
-    } else {
-      const sr = skin.shadowRoot;
-      if (!sr) return;
-      const anyMenu = sr.querySelector('media-menu-content');
-      if (anyMenu && !anyMenu.querySelector('.af-quality-trigger-item')) {
-        injected = false;
-        injectQuality();
-      } else if (renderQualityGear) {
-        renderQualityGear();
-      }
-    }
-  };
+  window.addEventListener('af:qualities-updated', renderQualityMenu);
+  window.addEventListener('af:quality-changed', renderQualityMenu);
+
+  return renderQualityMenu;
 }
 
 /* ─── Continue Watching row renderer ─────────────────────────────────────── */

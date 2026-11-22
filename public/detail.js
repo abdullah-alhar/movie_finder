@@ -423,12 +423,20 @@ export async function showDetail(main) {
         window.dispatchEvent(new CustomEvent('af:qualities-updated'));
       };
 
-      window.__movieQualities = matches.map((m, i) => ({
-        index: i,
-        name: (m.label || m.edition || 'HD').split('·')[0].trim(),
-        active: i === activeIdx,
-        select: () => doSwitch(i),
-      }));
+      window.__movieQualities = matches.map((m, i) => {
+        let name = m.resolution ? m.resolution + "p" : "";
+        if (!name) {
+          const matchRes = (m.label || "").match(/\b(1080|720|480|360|240)p?\b/i);
+          name = matchRes ? matchRes[1] + "p" : (m.label || m.edition || "HD").split("·")[0].trim();
+        }
+        return {
+          index: i,
+          name: name,
+          size: m.size || "",
+          active: i === activeIdx,
+          select: () => doSwitch(i),
+        };
+      });
       window.dispatchEvent(new CustomEvent('af:qualities-updated'));
     } else {
       window.__movieQualities = [];
@@ -447,8 +455,17 @@ export async function showDetail(main) {
       play.innerHTML = icon("play") + (selectedOption.episode != null ? "Play episode " + selectedOption.episode : "Play");
       actions.append(play);
 
-      // Auto-select best quality and play when user clicks play
-      // Quality switching is handled inside the gear ⚙ menu in the player
+      // In-Player Quality Popup Overlay inside video-wrap (Asks quality before playback starts)
+      let promptOverlay = find(".player-quality-prompt");
+      if (!promptOverlay) {
+        promptOverlay = document.createElement("div");
+        promptOverlay.className = "player-quality-prompt hidden";
+        find(".video-wrap")?.append(promptOverlay);
+      } else {
+        promptOverlay.classList.add("hidden");
+      }
+
+      // Big play button overlay on video
       let bigPlay = find(".video-big-play");
       if (!bigPlay) {
         bigPlay = document.createElement("button");
@@ -456,26 +473,82 @@ export async function showDetail(main) {
         bigPlay.className = "video-big-play";
         bigPlay.setAttribute("aria-label", "Play video");
         bigPlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
-        find(".video-wrap").append(bigPlay);
+        find(".video-wrap")?.append(bigPlay);
       }
       bigPlay.classList.remove("hidden");
 
+      if (matches.length > 1) {
+        promptOverlay.innerHTML = `
+          <div class="pqp-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div>
+                <h3 class="pqp-title" style="margin-bottom:3px">Select Quality to Play</h3>
+                <p class="pqp-subtitle" style="margin-bottom:0">Choose stream resolution to begin</p>
+              </div>
+              <button type="button" class="pqp-close" aria-label="Close" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+            </div>
+            <div class="pqp-options"></div>
+          </div>
+        `;
+        promptOverlay.querySelector(".pqp-close").onclick = (e) => {
+          e.stopPropagation();
+          promptOverlay.classList.add("hidden");
+        };
+
+        const optContainer = promptOverlay.querySelector(".pqp-options");
+        matches.forEach((opt, idx) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "pqp-btn" + (opt === selectedOption ? " active" : "");
+          let res = opt.resolution ? opt.resolution + "p" : "";
+          if (!res) {
+            const mRes = (opt.label || "").match(/\b(1080|720|480|360|240)p?\b/i);
+            res = mRes ? mRes[1] + "p" : (opt.label || opt.edition || "HD").split("·")[0].trim();
+          }
+          btn.innerHTML = `
+            <div>
+              <span class="pqp-res">${esc(res)}</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px">${esc(opt.edition || "")}</span>
+            </div>
+            <span class="pqp-meta">${esc(opt.size || "HD")}</span>
+          `;
+          btn.onclick = () => {
+            promptOverlay.classList.add("hidden");
+            bigPlay.classList.add("hidden");
+            resetPlayer();
+            prepareOption(matches[idx]);
+            playSelected();
+            window.__movieQualities?.forEach((q, qidx) => { q.active = (qidx === idx); });
+            window.dispatchEvent(new CustomEvent('af:qualities-updated'));
+          };
+          optContainer.append(btn);
+        });
+      } else {
+        promptOverlay.classList.add("hidden");
+      }
+
       video.addEventListener("play", () => {
+        promptOverlay?.classList.add("hidden");
         bigPlay?.classList.add("hidden");
       });
 
-      function startPlay() {
-        bigPlay?.classList.add("hidden");
-        playSelected();
+      function showQualityPicker() {
+        if (matches.length > 1 && promptOverlay) {
+          promptOverlay.classList.remove("hidden");
+          find("#watch")?.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          bigPlay?.classList.add("hidden");
+          playSelected();
+        }
       }
 
-      bigPlay.onclick = () => startPlay();
-      play.onclick = () => startPlay();
+      bigPlay.onclick = () => showQualityPicker();
+      play.onclick = () => showQualityPicker();
       const watchLink = find('.actions .primary[href="#watch"]');
       if (watchLink) {
         watchLink.onclick = (e) => {
           e.preventDefault();
-          startPlay();
+          showQualityPicker();
         };
       }
       for (const o of matches) {
