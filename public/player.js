@@ -241,7 +241,7 @@ function setupInPlayerQuality(video, skin) {
           </media-icon>
           <media-text>Quality</media-text>
           <span class="media-menu-hint">
-            <span class="media-menu-hint-label"></span>
+            <span class="af-quality-label"></span>
             <media-icon name="chevron" class="media-menu-forward-chevron">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
             </media-icon>
@@ -293,10 +293,24 @@ function setupInPlayerQuality(video, skin) {
       obs.observe(qualityItem, { attributes: true, attributeFilter: ['hidden', 'style'] });
     }
 
-    // Update active quality label hint on the main menu trigger
-    const hint = qualityItem.querySelector('.media-menu-hint-label') || qualityItem.querySelector('[data-part="value"]');
-    if (hint) {
-      hint.textContent = activeQ ? activeQ.name : '';
+    // Hide Video.js 10's built-in "Auto" label on the trigger, and display our real resolution
+    const defaultVal = qualityItem.querySelector('[data-part="value"]');
+    if (defaultVal) defaultVal.style.display = 'none';
+
+    let customVal = qualityItem.querySelector('.af-quality-label');
+    if (!customVal) {
+      customVal = document.createElement('span');
+      customVal.className = 'af-quality-label';
+      customVal.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-right:4px;';
+      const hintWrap = qualityItem.querySelector('.media-menu-hint') || qualityItem;
+      hintWrap.prepend(customVal);
+    }
+    customVal.textContent = activeQ ? activeQ.name : '';
+
+    // Hide Video.js 10's native <media-quality-radio-group> so "Auto" is not rendered
+    const nativeRadioGroup = qualityContent.querySelector('media-quality-radio-group');
+    if (nativeRadioGroup) {
+      nativeRadioGroup.style.display = 'none';
     }
 
     // Populate options inside qualityContent
@@ -331,6 +345,8 @@ function setupInPlayerQuality(video, skin) {
           video.dataset.pendingPlay   = String(wasPlay);
           q.select();
         }
+        // Update label immediately
+        if (customVal) customVal.textContent = q.name;
         // Go back to main menu
         try {
           const backBtn = qualityContent.querySelector('.media-menu-back-item');
