@@ -33,7 +33,7 @@ const SOURCE_KEYS = ['isaidub', 'moviezda'];
 // In production, origins MUST come from the DB (admin dashboard).
 const DEV_FALLBACK_DOMAINS = {
   isaidub: 'https://isaidub.green',
-  moviezda: 'https://moviesda36.com',
+  moviezda: 'https://moviezda.co',
 };
 
 export function updateOrigins(customConfig = null) {

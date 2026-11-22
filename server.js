@@ -56,6 +56,21 @@ export function createApp(
   app.disable("x-powered-by");
   const visits = new Map();
   let activeLookups = 0;
+  let originsLoaded = false;
+
+  // On serverless (Vercel), ensure DB config is loaded on first request
+  app.use(async (req, res, next) => {
+    if (!originsLoaded && process.env.EXPRESS_DATABASE_URL) {
+      try {
+        updateOrigins(await loadConfig());
+        originsLoaded = true;
+      } catch (err) {
+        console.warn("[origins] Delayed init error:", err.message);
+      }
+    }
+    next();
+  });
+
   app.use((req, res, next) => {
     res.set({
       "X-Content-Type-Options": "nosniff",
@@ -68,7 +83,8 @@ export function createApp(
     });
     if (process.env.NODE_ENV === "production")
       res.set("Strict-Transport-Security", "max-age=31536000");
-    if (!trusted.has((req.hostname || "").toLowerCase()))
+    const host = (req.hostname || "").toLowerCase();
+    if (!trusted.has(host) && !host.endsWith(".vercel.app"))
       return res.sendStatus(400);
     if (req.originalUrl.length > 6144) return res.sendStatus(414);
     next();
