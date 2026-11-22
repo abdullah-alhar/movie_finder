@@ -1,5 +1,5 @@
 {
-  "name": "afterframe",
+  "name": "aftershow",
   "version": "2.0.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,12 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --watch --env-file-if-exists=.env server.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "cheerio": "^1.1.2",
     "express": "^5.1.0",
-    "ipaddr.js": "^2.2.0"
+    "ipaddr.js": "^2.2.0",
+    "pg": "^8.23.1"
   }
 }

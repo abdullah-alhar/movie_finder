@@ -148,7 +148,7 @@ test("live series listings, posters and later episode pages stay reachable", asy
   const params = { source: "moviezda", category: "series" };
   assert.equal((await service.catalogue(params)).items[0].kind, "tv");
   const [item] = (await service.catalogue({ ...params, q: "The Court" })).items;
-  assert.equal(item.poster, origin + "/uploads/posters/the-court-2026.jpg");
+  assert.equal(item.poster, null); // No poster supplied by the listing.
   const info = await service.preview(item);
   assert.equal(info.quality, "Original HD");
   responses[origin + path] = responses[origin + path].replace(

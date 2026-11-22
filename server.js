@@ -1,11 +1,13 @@
+try { process.loadEnvFile?.(); } catch {}
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { catalogue, options, preview, resolveMedia } from "./providers.js";
-import { lookup, discovery, rating, trailer, artwork } from "./metadata.js";
+import { lookup, discovery, rating, trailer, artwork, seasonDetails } from "./metadata.js";
 import { movieFrom, sign, unpack } from "./links.js";
-import { origins, posterUrl, mediaKind } from "./sources.js";
-
+import { approved, updateOrigins, origins, posterUrl, mediaKind } from "./sources.js";
+import adminRouter from "./admin.js";
+import { loadConfig } from './admin-store.js';
 const publicDir = fileURLToPath(new URL("public/", import.meta.url));
 const trusted = new Set(
   [
@@ -31,7 +33,7 @@ function card(movie) {
     quality: movie.quality || null,
     kind: mediaKind(movie),
     poster: posterUrl(movie),
-    url:
+    url: provider === "Custom" ? movie.url :
       "/movie/" +
       sign("movie-details", [movie.url, title, year, mediaKind(movie)]),
   };
@@ -47,6 +49,7 @@ export function createApp(
     rating,
     trailer,
     artwork,
+    seasonDetails,
   },
 ) {
   const app = express();
@@ -59,7 +62,7 @@ export function createApp(
       "Referrer-Policy": "no-referrer",
       "X-Frame-Options": "DENY",
       "Content-Security-Policy":
-        "default-src 'self'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'",
       "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
       "Cache-Control": "no-store",
     });
@@ -113,6 +116,9 @@ export function createApp(
     }
     next();
   });
+  // Admin routes (before static/shell so /admin/* isn't caught by static)
+  app.use("/admin", adminRouter);
+
   const shell = (req, res) =>
     res.sendFile(fileURLToPath(new URL("public/index.html", import.meta.url)));
   app.get(["/", "/movies", "/series", "/search"], shell);
@@ -121,6 +127,30 @@ export function createApp(
       req.movie = movieFrom(token);
       next();
     } catch {
+      if (req.accepts("html")) {
+        return res.status(404).send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Movie Not Found · AfterShow</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { background: #0b0b0e; color: #f1f0ec; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    .box { background: #111116; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 32px 24px; max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h2 { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
+    p { margin: 0 0 20px; color: #8d8b94; font-size: 14px; line-height: 1.5; }
+    a { display: inline-block; background: #ff6b3d; color: #fff; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Movie Link Unavailable</h2>
+    <p>This film link has expired or updated. Browse the catalogue to find this title.</p>
+    <a href="/">Browse Movies</a>
+  </div>
+</body>
+</html>`);
+      }
       res.status(404).send("This movie link is invalid.");
     }
   });
@@ -150,6 +180,22 @@ export function createApp(
     }
     if (params.sort === "title")
       data.items.sort((a, b) => a.title.localeCompare(b.title));
+    
+    // Include approved curated links from PostgreSQL.
+    if (!params.source && !params.category) {
+      const customLinks = process.env.EXPRESS_DATABASE_URL ? (await loadConfig()).customLinks ?? [] : [];
+      const filteredCustom = customLinks.filter(l => approved(l.url) && (!q || l.label.toLowerCase().includes(q.toLowerCase())));
+      const customItems = filteredCustom.map(l => ({
+        title: l.label,
+        year: new Date().getFullYear(),
+        provider: "Custom",
+        quality: l.notes || "HD",
+        url: l.url,
+        kind: "movie",
+      }));
+      data.items = [...customItems, ...data.items];
+    }
+
     if (q && !suggest) {
       data.total = data.items.length;
       data.pages = Math.ceil(data.total / 24);
@@ -178,6 +224,10 @@ export function createApp(
   app.get("/movie/:token/metadata", async (req, res) =>
     res.json((await services.lookup(req.movie)) || {}),
   );
+  app.get("/movie/:token/season/:num", async (req, res) => {
+    const seasonNum = parseInt(req.params.num, 10) || 1;
+    res.json((await services.seasonDetails(req.movie, seasonNum)) || {});
+  });
   app.get("/movie/:token/rating", async (req, res) =>
     res.json({ rating: await services.rating(req.movie) }),
   );
@@ -198,6 +248,7 @@ export function createApp(
       req.query.kind === "tv" ? "tv" : "movie",
     );
     if (!result) return res.sendStatus(404);
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
     res.json(result);
   });
   app.get("/movie/:token/options", async (req, res) => {
@@ -220,11 +271,25 @@ export function createApp(
     });
   });
   app.get(["/watch/:id", "/download/:id"], async (req, res) => {
-    let page, movieToken;
+    let page, movieToken, movie;
     try {
       [page, movieToken] = unpack("movie-download", req.params.id);
-      const movie = movieFrom(movieToken);
-      if (new URL(page).origin !== new URL(movie.url).origin) throw new Error();
+      movie = movieFrom(movieToken);
+      const pageUrl = new URL(page);
+      const movieUrl = new URL(movie.url);
+      if (pageUrl.origin !== movieUrl.origin) {
+        if (
+          // Allow mirror domains for the same source family (admin may have changed the URL)
+          Object.entries(origins).some(([k, o]) => {
+            if (k !== movie.source) return false;
+            return new URL(o).hostname === pageUrl.hostname;
+          })
+        ) {
+          page = new URL(pageUrl.pathname + pageUrl.search, movieUrl.origin).href;
+        } else {
+          throw new Error("Invalid origin");
+        }
+      }
     } catch {
       return res.sendStatus(404);
     }
@@ -268,7 +333,21 @@ if (
   const host =
     process.env.HOST ||
     (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
+  if (process.env.EXPRESS_DATABASE_URL) {
+    // Load provider URLs from DB at startup. Origins stay empty until this succeeds.
+    // If the DB is briefly unreachable, warn and continue — scraper will return
+    // unavailable until the next admin dashboard load refreshes the origins.
+    try {
+      updateOrigins(await loadConfig());
+    } catch (err) {
+      console.warn(`[startup] Could not load config from DB: ${err.message}. Provider origins will be empty until DB is reachable.`);
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    throw new Error("EXPRESS_DATABASE_URL is required in production");
+  } else {
+    console.warn("[startup] EXPRESS_DATABASE_URL not set — admin dashboard requires it.");
+  }
   app.listen(port, host, () =>
-    console.log(`Afterframe is listening on http://${host}:${port}`),
+    console.log(`AfterShow is listening on http://${host}:${port}`),
   );
 }

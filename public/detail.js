@@ -1,36 +1,112 @@
 import { icon, esc, safeImage, json, section, choice, toast } from "./ui.js";
-function episodePicker(episodes, selected, choose) {
-  const field = document.createElement("fieldset");
-  field.className = "episodes";
-  const legend = document.createElement("legend");
-  legend.textContent = "Episodes";
-  field.append(legend);
-  const label = (value) => value < 0 ? "Other" : String(value);
-  for (let start = 0; start < episodes.length; start += 20) {
-    const group = episodes.slice(start, start + 20);
-    const grid = document.createElement("div");
-    grid.className = "episode-grid";
-    for (const episode of group) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = label(episode);
-      button.setAttribute("aria-label", "Episode " + label(episode));
-      button.setAttribute("aria-pressed", String(episode === selected));
-      button.onclick = () => choose(episode);
-      grid.append(button);
-    }
-    if (episodes.length <= 20) {
-      field.append(grid);
-      break;
-    }
-    const range = document.createElement("div");
-    range.className = "episode-range";
-    const summary = document.createElement("p");
-    summary.textContent = group.length === 1 ? label(group[0]) : label(group[0]) + "–" + label(group.at(-1));
-    range.append(summary, grid);
-    field.append(range);
+function episodePicker(episodes, selected, choose, item = {}, selectedSeason = 1) {
+  const container = document.createElement("div");
+  container.className = "series-episodes-wrap";
+
+  const head = document.createElement("div");
+  head.className = "series-episodes-head";
+  head.innerHTML = `
+    <div class="series-season-title">
+      <span class="season-badge">SEASON</span>
+      <span class="season-num">${selectedSeason >= 0 ? selectedSeason : 1}</span>
+      <span class="ep-count-badge">${episodes.length} Episodes</span>
+    </div>
+    <div class="series-nav-arrows">
+      <button type="button" class="ep-arrow ep-prev" aria-label="Previous episodes">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <button type="button" class="ep-arrow ep-next" aria-label="Next episodes">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+  `;
+  container.append(head);
+
+  const grid = document.createElement("div");
+  grid.className = "episode-grid series-carousel";
+
+  const art = item.backdrop || item.image || item.poster || "";
+
+  for (const ep of episodes) {
+    const isSelected = ep === selected;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ep-card" + (isSelected ? " active" : "");
+    btn.dataset.ep = String(ep);
+    btn.setAttribute("aria-label", "Episode " + (ep < 0 ? "Other" : ep));
+    btn.setAttribute("aria-pressed", String(isSelected));
+
+    const epNum = ep < 0 ? "Special" : `E${ep}`;
+    const epTitle = ep < 0 ? "Special Episode" : `${ep}. Episode ${ep}`;
+
+    btn.innerHTML = `
+      <div class="ep-card-thumb">
+        ${art ? `<img src="${esc(art)}" alt="" loading="lazy">` : `<div class="ep-thumb-fallback">${icon("tv")}</div>`}
+        <div class="ep-card-play">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>
+        </div>
+        <span class="ep-badge-e">${esc(epNum)}</span>
+        <span class="ep-badge-hd">HD</span>
+      </div>
+      <div class="ep-card-meta">
+        <p class="ep-card-title">${esc(epTitle)}</p>
+        <p class="ep-card-info">
+          ${item.rating ? `<span class="ep-star">★</span> ${Number(item.rating).toFixed(1)} <span class="ep-dot">·</span> ` : ''}${item.year || "Series"}
+        </p>
+      </div>
+    `;
+
+    btn.onclick = () => {
+      choose(ep);
+    };
+
+    grid.append(btn);
   }
-  return field;
+
+  container.append(grid);
+
+  // Fetch real episode-level TMDB metadata (unique rating & screenshot per episode)
+  const sNum = selectedSeason >= 0 ? selectedSeason : 1;
+  const basePath = location.pathname.replace(/\/(watch|downloads)\/?$/, "").replace(/\/$/, "");
+  json(basePath + '/season/' + sNum).then(data => {
+    if (!data?.episodes?.length) return;
+    const epMap = new Map(data.episodes.map(e => [e.episode, e]));
+    grid.querySelectorAll('.ep-card').forEach(cardEl => {
+      const epNum = Number(cardEl.dataset.ep);
+      const epInfo = epMap.get(epNum);
+      if (!epInfo) return;
+      if (epInfo.title) {
+        const titleEl = cardEl.querySelector('.ep-card-title');
+        if (titleEl) titleEl.textContent = `${epNum}. ${epInfo.title}`;
+      }
+      if (epInfo.rating) {
+        const infoEl = cardEl.querySelector('.ep-card-info');
+        if (infoEl) {
+          infoEl.innerHTML = `<span class="ep-star">★</span> ${epInfo.rating} <span class="ep-dot">·</span> E${epNum}`;
+        }
+      }
+      if (epInfo.image) {
+        const thumbHolder = cardEl.querySelector('.ep-card-thumb');
+        let img = thumbHolder.querySelector('img');
+        if (!img) {
+          img = document.createElement('img');
+          img.loading = 'lazy';
+          thumbHolder.prepend(img);
+          thumbHolder.querySelector('.ep-thumb-fallback')?.remove();
+        }
+        img.src = epInfo.image;
+      }
+    });
+  }).catch(() => {});
+
+  const prevBtn = head.querySelector(".ep-prev");
+  const nextBtn = head.querySelector(".ep-next");
+  if (prevBtn && nextBtn) {
+    prevBtn.onclick = () => grid.scrollBy({ left: -360, behavior: "smooth" });
+    nextBtn.onclick = () => grid.scrollBy({ left: 360, behavior: "smooth" });
+  }
+
+  return container;
 }
 
 export async function showDetail(main) {
@@ -47,19 +123,19 @@ export async function showDetail(main) {
     return;
   }
   item = { ...item, url: base, image: safeImage(item.image || item.poster) };
-  document.title = item.title + " · Afterframe";
+  document.title = item.title + " · AfterShow";
   main.innerHTML =
-    '<a class="back" href="/movies">Browse films</a><section class="detail-header"><div class="detail-cover"><span>' +
+    '<a class="back" href="/movies"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg> Browse films</a><section class="detail-header"><div class="detail-cover"><span>' +
     esc(item.title) +
     '</span></div><div class="detail-copy"><p class="eyebrow">FILM DETAILS</p><h1>' +
     esc(item.title) +
     '</h1><p class="muted" id="facts">' +
-    esc([item.year, item.provider].filter(Boolean).join(" · ")) +
+    esc([item.year, item.kind === "tv" ? "Series" : "Movie"].filter(Boolean).join(" · ")) +
     '</p><p id="release-quality" class="muted"></p><p id="overview"></p><p class="muted" id="cast"></p><p class="rating"></p><div class="actions"><a class="primary" href="#watch">' +
     icon("play") +
     'Watch</a><a class="secondary" href="#downloads">Download</a><button class="secondary share">' +
     icon("share") +
-    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><p class="selection-title"></p><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p><details class="player-settings" hidden><summary>Player settings</summary><div class="media-controls"></div></details></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><h2>Downloads</h2><p class="download-selection muted"></p><ul></ul><div class="download-recovery" role="status"></div></section></div>';
+    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><p class="selection-title"></p><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><h2>Downloads</h2><p class="download-selection muted"></p><ul></ul><div class="download-recovery" role="status"></div></section></div>';
   const find = (sel) => main.querySelector(sel),
     video = find("video"),
     status = find(".player-state");
@@ -121,7 +197,6 @@ export async function showDetail(main) {
       const data = await json(base + "/metadata");
       find("#facts").textContent = [
         item.year,
-        item.provider,
         ...(data.genres || []),
         data.runtime ? data.runtime + " min" : "",
       ]
@@ -146,12 +221,10 @@ export async function showDetail(main) {
           .catch(() => {});
       }
       if (safeImage(data.backdrop)) video.poster = data.backdrop;
-      if (data.rating)
-        find(".rating").append(
-          document.createTextNode(
-            "TMDB " + Number(data.rating).toFixed(1) + " / 10 ",
-          ),
-        );
+      if (data.rating) {
+        find(".rating").innerHTML =
+          `<span class="rating-badge"><span class="star">★</span> ${Number(data.rating).toFixed(1)} <span class="rating-source">${data.source || 'TMDB'}</span></span>`;
+      }
       if (data.recommendations?.length)
         main.append(section("More like this", data.recommendations));
     } catch {
@@ -167,17 +240,14 @@ export async function showDetail(main) {
   metadata();
   json(base + "/rating")
     .then(({ rating }) => {
-      if (rating?.score)
-        find(".rating").append(
-          document.createTextNode(
-            " IMDb " + Number(rating.score).toFixed(1) + " / 10",
-          ),
-        );
+      if (rating?.score) {
+        find(".rating").innerHTML =
+          `<span class="rating-badge"><span class="star">★</span> ${Number(rating.score).toFixed(1)} <span class="rating-source">${rating.source || 'IMDb'}</span></span>`;
+      }
     })
     .catch(() => {});
   let selectedSeason, selectedEpisode, selectedOption, selectedPart;
   let sequence = [];
-  const settings = find(".player-settings");
   const picker = find(".selection-picker");
   const shell = find(".player-shell");
   const expand = find(".expand");
@@ -271,10 +341,8 @@ export async function showDetail(main) {
     video.load();
   }
   function render() {
-    const controls = find(".media-controls"),
-      actions = find(".media-actions"),
+    const actions = find(".media-actions"),
       list = find(".downloads ul");
-    controls.replaceChildren();
     actions.replaceChildren();
     list.replaceChildren();
     const selection = find(".selection-controls");
@@ -303,8 +371,8 @@ export async function showDetail(main) {
         episodePicker(episodes, selectedEpisode, (episode) => {
           if (episode === selectedEpisode) return;
           selectMedia(selectedSeason, episode, undefined);
-          picker.querySelector('.episode-grid [aria-pressed="true"]').focus({ preventScroll: true });
-        }),
+          picker.querySelector('.episode-grid [aria-pressed="true"]')?.focus({ preventScroll: true });
+        }, item, selectedSeason),
       );
       matches = matches.filter((o) => (o.episode ?? -1) === selectedEpisode);
     }
@@ -334,29 +402,38 @@ export async function showDetail(main) {
     }
     const label = (o) =>
       [o.label, o.edition, o.size].filter(Boolean).join(" · ");
-    if (matches.length > 1)
-      controls.append(
-        choice(
-          "Quality",
-          matches.map((_, i) => i),
-          initial,
-          (i) => {
-            const resume = !video.paused;
-            const time = video.currentTime;
-            resetPlayer();
-            prepareOption(matches[i]);
-            if (time > 0) {
-              const target = matches[i].watch;
-              video.addEventListener("loadedmetadata", () => {
-                if (video.getAttribute("src") === target && Number.isFinite(video.duration))
-                  video.currentTime = Math.min(time, video.duration);
-              }, { once: true });
-            }
-            if (resume) playSelected();
-          },
-          (i) => label(matches[i]),
-        ),
-      );
+    if (matches.length > 1) {
+      const activeIdx = matches.indexOf(selectedOption) >= 0 ? matches.indexOf(selectedOption) : initial;
+      const doSwitch = (i) => {
+        const time = video.currentTime;
+        const wasPlaying = !video.paused;
+        resetPlayer();
+        prepareOption(matches[i]);
+        if (time > 0) {
+          const target = matches[i].watch;
+          video.addEventListener("loadedmetadata", () => {
+            if (video.getAttribute("src") === target && Number.isFinite(video.duration))
+              video.currentTime = Math.min(time, video.duration);
+            if (wasPlaying) playSelected();
+          }, { once: true });
+        } else if (wasPlaying) {
+          playSelected();
+        }
+        window.__movieQualities?.forEach((q, idx) => { q.active = (idx === i); });
+        window.dispatchEvent(new CustomEvent('af:qualities-updated'));
+      };
+
+      window.__movieQualities = matches.map((m, i) => ({
+        index: i,
+        name: (m.label || m.edition || 'HD').split('·')[0].trim(),
+        active: i === activeIdx,
+        select: () => doSwitch(i),
+      }));
+      window.dispatchEvent(new CustomEvent('af:qualities-updated'));
+    } else {
+      window.__movieQualities = [];
+      window.dispatchEvent(new CustomEvent('af:qualities-updated'));
+    }
     picker.hidden = !series && !multipart;
     const selectedLabel = series ? [
       selectedSeason >= 0 && "Season " + selectedSeason,
@@ -364,16 +441,43 @@ export async function showDetail(main) {
     ].filter(Boolean).join(" · ") : selectedPart != null ? "Part " + selectedPart : "Other versions";
     find(".download-selection").textContent = series || multipart ? selectedLabel : "";
     picker.querySelector(".selection-title").textContent = selectedLabel;
-    settings.hidden = !matches.length;
-    settings.querySelector("summary").textContent = "Playback settings";
     if (matches.length) {
-      controls.append(choice("Speed", [0.5, 0.75, 1, 1.25, 1.5, 2], video.defaultPlaybackRate,
-        rate => { video.defaultPlaybackRate = rate; video.playbackRate = rate; }, rate => rate + "×"));
       const play = document.createElement("button");
       play.className = "primary";
       play.innerHTML = icon("play") + (selectedOption.episode != null ? "Play episode " + selectedOption.episode : "Play");
       actions.append(play);
-      play.onclick = playSelected;
+
+      // Auto-select best quality and play when user clicks play
+      // Quality switching is handled inside the gear ⚙ menu in the player
+      let bigPlay = find(".video-big-play");
+      if (!bigPlay) {
+        bigPlay = document.createElement("button");
+        bigPlay.type = "button";
+        bigPlay.className = "video-big-play";
+        bigPlay.setAttribute("aria-label", "Play video");
+        bigPlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+        find(".video-wrap").append(bigPlay);
+      }
+      bigPlay.classList.remove("hidden");
+
+      video.addEventListener("play", () => {
+        bigPlay?.classList.add("hidden");
+      });
+
+      function startPlay() {
+        bigPlay?.classList.add("hidden");
+        playSelected();
+      }
+
+      bigPlay.onclick = () => startPlay();
+      play.onclick = () => startPlay();
+      const watchLink = find('.actions .primary[href="#watch"]');
+      if (watchLink) {
+        watchLink.onclick = (e) => {
+          e.preventDefault();
+          startPlay();
+        };
+      }
       for (const o of matches) {
         if (!/^\/download\/[\w.-]+$/.test(o.download || "")) continue;
         const li = document.createElement("li"),
@@ -418,8 +522,11 @@ export async function showDetail(main) {
     actions.replaceChildren();
     status.textContent = "Checking available versions…";
     find(".download-recovery").textContent = "Checking available files…";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
     try {
-      const result = await json(base + "/options");
+      const result = await json(base + "/options", controller.signal);
+      clearTimeout(timer);
       all = result.options || [];
       const editions = [
         ...new Set(all.map((option) => option.edition).filter(Boolean)),
@@ -429,6 +536,7 @@ export async function showDetail(main) {
         (editions.join(" / ") || result.quality || "Unlisted");
       partial = Boolean(result.unavailable);
     } catch {
+      clearTimeout(timer);
       all = [];
       partial = true;
     }

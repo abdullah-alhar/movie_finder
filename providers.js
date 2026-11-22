@@ -27,7 +27,16 @@ function safeURL(value, base) {
   }
 }
 
+const dnsCache = new Map();
 function publicLookup(host, options, callback) {
+  const cached = dnsCache.get(host);
+  if (cached && cached.expires > Date.now()) {
+    if (options.all) return callback(null, cached.rows);
+    const row = cached.rows.find(
+      (candidate) => !options.family || candidate.family === options.family,
+    ) || cached.rows[0];
+    return callback(null, row.address, row.family);
+  }
   lookup(host, { all: true }, (err, rows) => {
     if (err) return callback(err);
     const privateAddress = rows.some(
@@ -35,6 +44,7 @@ function publicLookup(host, options, callback) {
     );
     if (!rows.length || privateAddress)
       return callback(new Error("Public source required"));
+    dnsCache.set(host, { rows, expires: Date.now() + 300_000 });
     if (options.all) callback(null, rows);
     else {
       const row = rows.find(
@@ -46,16 +56,25 @@ function publicLookup(host, options, callback) {
   });
 }
 
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 32,
+  maxFreeSockets: 10,
+  timeout: 5000,
+});
+
 function requestPage(url, signal) {
   return new Promise((resolve, reject) => {
     const req = https.get(
       url,
       {
+        agent: httpsAgent,
         lookup: publicLookup,
         autoSelectFamily: true,
         signal,
         headers: {
-          "User-Agent": "Afterframe/2.0",
+          "User-Agent": "AfterShow/2.0",
           Accept: "*/*",
         },
       },
@@ -92,11 +111,11 @@ function requestPage(url, signal) {
 
 let active = 0;
 const queue = [];
-export async function readHTML(address, timeout = 8000) {
+export async function readHTML(address, timeout = 4500) {
   let url = safeURL(address);
   if (!url) throw new Error("Invalid URL");
   const signal = AbortSignal.timeout(timeout);
-  if (active >= 10) {
+  if (active >= 24) {
     if (queue.length >= 64) throw new Error("Sources busy");
     await new Promise((resolve, reject) => {
       function begin() {
@@ -142,9 +161,12 @@ function parseListing(html, url, source) {
         .text()
         .trim()
         .match(/^(.{1,240}?)\s+\(((?:18|19|20)\d{2})\)/);
+      const isSourceOrigin = target?.origin === origins[source] ||
+        // Allow any URL whose origin matches any registered origin for this source family
+        Object.entries(origins).some(([k, o]) => k === source && target?.origin === o);
       if (
         !match ||
-        target?.origin !== origins[source] ||
+        !isSourceOrigin ||
         !moviePatterns[source].test(target.pathname)
       )
         return;
@@ -233,8 +255,11 @@ const episode = /(?:\b(?:episode|epi|ep)\s*|(?<=\d)e|\bE)(\d{1,4})\b/i;
 function releaseQuality(label) {
   const formats = [
     [/\b(?:hq[ -]*)?pre[ -]*dvd(?:rip)?\b/i, "PreDVD"],
-    [/\b(?:hd[ -]*)?cam(?:rip)?\b/i, "CAM"],
-    [/\bHDTS\b/i, "HDTS"],
+    [/\b(?:hd[ -]*)?cam(?:[ -]*dvd|rip)?\b/i, "CAM"],
+    [/\bcam[ -]*dvd\b/i, "CAM"],
+    [/\b(?:hd[ -]*)?ts\b|\bhdts\b|\btelesync\b/i, "HDTS"],
+    [/\b(?:tc|tcrip|telecine)\b/i, "TC"],
+    [/\bdvdscr|scr\b/i, "SCR"],
     [/\bweb[ -]*dl\b/i, "WEB-DL"],
     [/\bweb[ -]*rip\b/i, "WEBRip"],
     [/\b(?:blu[ -]*ray|b[rd]rip)\b/i, "Blu-ray"],
@@ -300,12 +325,14 @@ export function createProviders(read = readHTML) {
       ? (Math.min(42, Math.max(1, parseInt(scan) || 1)) - 1) * 12 + 1
       : Math.min(500, Math.max(1, parseInt(page) || 1));
     let unavailable = false,
-      more = false;
+      more = false,
+      maxPages = 1;
     const groups = await Promise.all(
       sources.flatMap((source) =>
         categories(term, source, category).map(async (category) => {
           try {
             const first = await listing(source, category, 1);
+            if (first.total) maxPages = Math.max(maxPages, first.total);
             const end = term ? start + size - 1 : start;
             more ||= first.total > end;
             const pending = [];
@@ -351,130 +378,191 @@ export function createProviders(read = readHTML) {
   }
 
   async function preview(movie) {
-    const { html, url } = await read(movie.url);
-    const $ = load(html);
-    const src = $('img[src*="/posters/"]').first().attr("src");
-    return { quality: pageQuality($), poster: safeURL(src, url)?.href || null };
+    let target = safeURL(movie.url);
+    if (!target) return { quality: null, poster: null };
+    let source = Object.keys(origins).find((k) => origins[k] === target.origin);
+    if (!source) {
+      if (/isaidub/i.test(target.hostname)) source = "isaidub";
+      else if (/moviezda|moviesda/i.test(target.hostname)) source = "moviezda";
+    }
+    if (source && origins[source] && origins[source] !== target.origin) {
+      target = safeURL(target.pathname + target.search, origins[source]) || target;
+    }
+    try {
+      const { html, url } = await read(target.href);
+      const $ = load(html);
+      const src = $('img[src*="/posters/"]').first().attr("src");
+      return { quality: pageQuality($), poster: safeURL(src, url)?.href || null };
+    } catch {
+      return { quality: null, poster: null };
+    }
   }
 
+  const optionsCache = new Map();
+  const pendingOptions = new Map();
+
   async function options(movie) {
-    const root = safeURL(movie.url);
-    const source = Object.keys(origins).find(
-      (key) => origins[key] === root?.origin,
+    let root = safeURL(movie.url);
+    if (!root) return { options: [], unavailable: true };
+
+    let source = Object.keys(origins).find(
+      (key) => origins[key] === root.origin,
     );
-    if (!source || !moviePatterns[source].test(root.pathname))
-      return { options: [], unavailable: true };
-    const found = new Map(),
-      seen = new Set([root.href]);
-    let unavailable = false;
-    let rootQuality = "";
-    let batch = [{ url: root.href, context: "", version: "" }];
-    const deadline = Date.now() + 40000;
-    for (let depth = 0; batch.length; depth++) {
-      const next = [];
-      for (let offset = 0; offset < batch.length; offset += 5) {
-        await Promise.all(
-          batch.slice(offset, offset + 5).map(async (item) => {
-            try {
-              if (Date.now() >= deadline) throw new Error("Source timed out");
-              const { html, url } = await read(item.url);
-              const $ = load(html);
-              const version = item.version || pageQuality($);
-              if (depth === 0) rootQuality = version;
-              $("a[href]")
-                .slice(0, 5000)
-                .each((_, el) => {
-                  const a = $(el),
-                    href = safeURL(a.attr("href"), url);
-                  if (href?.origin !== root.origin) return;
-                  const label = a.text().replace(/\s+/g, " ").trim();
-                  if (
-                    href.pathname === new URL(url).pathname &&
-                    /^\?(?:get-)?page=\d+$/.test(href.search) &&
-                    !seen.has(href.href)
-                  ) {
-                    if (seen.size >= 256) {
-                      unavailable = true;
-                      return;
-                    }
-                    seen.add(href.href);
-                    next.push({ ...item, url: href.href, version });
-                    return;
-                  }
-                  if (!label) return;
-                  const context = label + " " + item.context;
-                  if (
-                    itemPattern.test(href.pathname) &&
-                    !/\b(sample|trailer|teaser)\b/i.test(label)
-                  ) {
-                    const quality = resolution(context);
-                    const size =
-                      a
-                        .closest("ul")
-                        .text()
-                        .match(
-                          /\b(?:file\s*)?size\s*:\s*(\d+(?:\.\d+)?\s*(?:GB|MB|KB))\b/i,
-                        )?.[1] ||
-                      label.match(/\((\d+(?:\.\d+)?\s*(?:GB|MB|KB))\)/i)?.[1] ||
-                      "";
-                    found.set(href.href, {
-                      page: href.href,
-                      title: label,
-                      label: quality ? quality + "p" : label,
-                      resolution: quality,
-                      size: size.toUpperCase(),
-                      edition: version || context.match(edition)?.[0] || "",
-                      season: Number(context.match(season)?.[1]) || null,
-                      episode: Number(context.match(episode)?.[1]) || null,
-                    });
-                  } else if (
-                    folder.test(href.pathname) &&
-                    (resolution(label) ||
-                      edition.test(label) ||
-                      season.test(label)) &&
-                    !seen.has(href.href)
-                  ) {
-                    if (seen.size >= 64 || depth === 3) {
-                      unavailable = true;
-                      return;
-                    }
-                    seen.add(href.href);
-                    const nextVersion = !resolution(label)
-                      ? label.match(edition)?.[0]
-                      : "";
-                    next.push({
-                      url: href.href,
-                      context,
-                      version:
-                        nextVersion &&
-                        !(version && /^original$/i.test(nextVersion))
-                          ? nextVersion
-                          : version,
-                    });
-                  }
-                });
-            } catch {
-              unavailable = true;
-            }
-          }),
-        );
-      }
-      batch = next;
+    if (!source) {
+      if (/isaidub/i.test(root.hostname)) source = "isaidub";
+      else if (/moviezda|moviesda/i.test(root.hostname)) source = "moviezda";
     }
-    return {
-      quality: rootQuality,
-      options: [...found.values()].sort((a, b) => b.resolution - a.resolution),
-      unavailable,
-    };
+    if (!source) return { options: [], unavailable: true };
+
+    // Point root to the CURRENT active origin for this source so updated mirrors work seamlessly!
+    if (origins[source] && origins[source] !== root.origin) {
+      root = safeURL(root.pathname + root.search, origins[source]) || root;
+    }
+
+    if (!moviePatterns[source].test(root.pathname))
+      return { options: [], unavailable: true };
+
+    const cacheKey = root.href;
+    const cached = optionsCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data;
+    }
+    if (pendingOptions.has(cacheKey)) {
+      return pendingOptions.get(cacheKey);
+    }
+
+    const fetchPromise = (async () => {
+      const found = new Map(),
+        seen = new Set([root.href]);
+      let unavailable = false;
+      let rootQuality = "";
+      let batch = [{ url: root.href, context: "", version: "" }];
+      const deadline = Date.now() + 20000;
+      for (let depth = 0; batch.length && depth < 4; depth++) {
+        const next = [];
+        for (let offset = 0; offset < batch.length; offset += 10) {
+          await Promise.all(
+            batch.slice(offset, offset + 10).map(async (item) => {
+              try {
+                if (Date.now() >= deadline) throw new Error("Source timed out");
+                const { html, url } = await read(item.url);
+                const $ = load(html);
+                const version = item.version || pageQuality($);
+                if (depth === 0) rootQuality = version;
+                $("a[href]")
+                  .slice(0, 5000)
+                  .each((_, el) => {
+                    const a = $(el),
+                      href = safeURL(a.attr("href"), url);
+                    if (href?.origin !== root.origin) return;
+                    const label = a.text().replace(/\s+/g, " ").trim();
+                    if (
+                      href.pathname === new URL(url).pathname &&
+                      /^\?(?:get-)?page=\d+$/.test(href.search) &&
+                      !seen.has(href.href)
+                    ) {
+                      if (seen.size >= 128) {
+                        unavailable = true;
+                        return;
+                      }
+                      seen.add(href.href);
+                      next.push({ ...item, url: href.href, version });
+                      return;
+                    }
+                    if (!label) return;
+                    const context = label + " " + item.context;
+                    if (
+                      itemPattern.test(href.pathname) &&
+                      !/\b(sample|trailer|teaser)\b/i.test(label)
+                    ) {
+                      const quality = resolution(context);
+                      const size =
+                        a
+                          .closest("ul")
+                          .text()
+                          .match(
+                            /\b(?:file\s*)?size\s*:\s*(\d+(?:\.\d+)?\s*(?:GB|MB|KB))\b/i,
+                          )?.[1] ||
+                        label.match(/\((\d+(?:\.\d+)?\s*(?:GB|MB|KB))\)/i)?.[1] ||
+                        "";
+                      found.set(href.href, {
+                        page: href.href,
+                        title: label,
+                        label: quality ? quality + "p" : label,
+                        resolution: quality,
+                        size: size.toUpperCase(),
+                        edition: version || context.match(edition)?.[0] || "",
+                        season: Number(context.match(season)?.[1]) || null,
+                        episode: Number(context.match(episode)?.[1]) || null,
+                      });
+                    } else if (
+                      folder.test(href.pathname) &&
+                      (resolution(label) ||
+                        edition.test(label) ||
+                        season.test(label)) &&
+                      !seen.has(href.href)
+                    ) {
+                      if (seen.size >= 48 || depth === 3) {
+                        unavailable = true;
+                        return;
+                      }
+                      seen.add(href.href);
+                      const nextVersion = !resolution(label)
+                        ? label.match(edition)?.[0]
+                        : "";
+                      next.push({
+                        url: href.href,
+                        context,
+                        version:
+                          nextVersion &&
+                          !(version && /^original$/i.test(nextVersion))
+                            ? nextVersion
+                            : version,
+                      });
+                    }
+                  });
+              } catch {
+                unavailable = true;
+              }
+            }),
+          );
+        }
+        batch = next;
+        if (found.size >= 8 && depth >= 1) break;
+      }
+      const data = {
+        quality: rootQuality,
+        options: [...found.values()].sort((a, b) => b.resolution - a.resolution),
+        unavailable,
+      };
+      if (data.options.length) {
+        optionsCache.set(cacheKey, { data, expires: Date.now() + 120_000 });
+      }
+      return data;
+    })();
+
+    pendingOptions.set(cacheKey, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      pendingOptions.delete(cacheKey);
+    }
   }
 
   async function resolveMedia(page, watch) {
     let current = safeURL(page);
-    if (
-      !current ||
-      !Object.values(origins).includes(current.origin) ||
-      !itemPattern.test(current.pathname)
-    )
+    if (!current) return null;
+    let source = Object.keys(origins).find(
+      (key) => origins[key] === current.origin,
+    );
+    if (!source) {
+      if (/isaidub/i.test(current.hostname)) source = "isaidub";
+      else if (/moviezda|moviesda/i.test(current.hostname)) source = "moviezda";
+    }
+    if (source && origins[source] && origins[source] !== current.origin) {
+      current = safeURL(current.pathname + current.search, origins[source]) || current;
+    }
+    if (!current || !itemPattern.test(current.pathname))
       return null;
     const seen = new Set();
     let firstHandoff = null;

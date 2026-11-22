@@ -48,10 +48,10 @@ const normalize = (text) =>
       return index < 0 ? phrase : `${prefix} ${index + 1}`;
     });
 const clean = (text) =>
-  text
+  String(text ?? "")
     .replace(/\[[^\]]*\]|\([^)]*\)/g, " ")
     .replace(
-      /\b(480p|720p|1080p|2160p|4k|web[ .-]?dl|webrip|bluray|brrip|hdrip|x26[45]|hevc|hdtv|tamil|dubbed)\b/gi,
+      /\b(480p|720p|1080p|2160p|4k|web[ .-]?dl|webrip|bluray|brrip|hdrip|x26[45]|hevc|hdtv|tamil|dubbed|telugu|hindi|malayalam|kannada|english|moviesda|isaidub|esub|sub|uncut|proper|season\s*\d+|s\d+|ep\d+|episode\s*\d+)\b/gi,
       " ",
     )
     .replace(/[^\p{L}\p{N}:]+/gu, " ")
@@ -91,21 +91,33 @@ function matchTitle({ title, year }, rows) {
     const date = (row.release_date || row.first_air_date || "").slice(0, 4);
     const delta =
       year && /^\d{4}$/.test(date) ? Math.abs(Number(date) - year) : null;
-    if (delta !== null && delta > 1) continue;
+    const candidates = [row.title, row.original_title, row.name, row.original_name].filter(Boolean);
     const alike = Math.max(
-      ...[row.title, row.original_title, row.name, row.original_name].map(
-        (name) => similarity(wanted, normalize(name)),
+      ...candidates.map(
+        (name) => similarity(wanted, normalize(name || "")),
       ),
     );
-    const score = alike + (delta === 0 ? 0.18 : 0);
-    if (alike >= 0.78 && score > highest) {
+
+    // Tighten matching rules:
+    // If title is short (<= 5 chars, like "AOT", "OM", "418", "Steps"):
+    // require an exact normalized match or high alike >= 0.88
+    if (wanted.length <= 5) {
+      const exact = candidates.some(n => normalize(n) === wanted);
+      if (!exact && alike < 0.88) continue;
+    } else {
+      if (alike < 0.76) continue;
+    }
+
+    if (delta !== null && delta > 2 && alike < 0.84) continue;
+    const score = alike + (delta === 0 ? 0.25 : 0);
+    if (score > highest) {
       highest = score;
       match = row;
     }
   }
   return match;
 }
-const image = (path, size = "w500") =>
+const image = (path, size = "w780") =>
   /^\/[\w.-]+$/.test(path ?? "")
     ? `https://image.tmdb.org/t/p/${size}${path}`
     : null;
@@ -213,7 +225,7 @@ export function createMetadata({ read = readRemote, env = process.env } = {}) {
       );
     return pending.get(key);
   }
-  const configured = (key) => key?.trim() && !key.trim().startsWith("[");
+  const configured = (key) => Boolean(key?.trim() && !key.trim().startsWith("["));
   const apiUrl = (path, params) => path + "?" + new URLSearchParams(params);
   const json = async (url, timeout) => JSON.parse(await read(url, timeout));
   const tmdb = (path, params = {}) =>
@@ -223,31 +235,38 @@ export function createMetadata({ read = readRemote, env = process.env } = {}) {
     const { title, year } = movie;
     const kind = mediaKind(movie);
     return share(JSON.stringify(["lookup", title, year, kind]), async () => {
-      for (const query of new Set([title, clean(title)])) {
-        const found = await tmdb("/search/" + kind, {
-          query,
-          include_adult: "false",
-        });
-        const match = matchTitle(movie, found.results || []);
-        if (!Number.isSafeInteger(match?.id)) continue;
-        const path = "/" + kind + "/" + match.id;
-        const info = await tmdb(path, {
-          append_to_response: "credits,recommendations",
-        });
-        return {
-          source: "TMDB",
-          article: "https://www.themoviedb.org" + path,
-          image: image(info.poster_path),
-          backdrop: image(info.backdrop_path, "w1280"),
-          overview: info.overview || "",
-          runtime: info.runtime || info.episode_run_time?.[0] || null,
-          rating: info.vote_count ? info.vote_average : null,
-          genres: (info.genres || []).map((genre) => genre.name),
-          cast: (info.credits?.cast || []).slice(0, 8).map((p) => p.name),
-          recommendations: (info.recommendations?.results || [])
-            .slice(0, 10)
-            .map(movieCard),
-        };
+      const kindsToTry = [kind, kind === "tv" ? "movie" : "tv"];
+      for (const k of kindsToTry) {
+        for (const query of new Set([clean(title), title])) {
+          if (!query || query.length < 2) continue;
+          try {
+            const found = await tmdb("/search/" + k, {
+              query,
+              include_adult: "false",
+            });
+            const match = matchTitle(movie, found.results || []);
+            if (!Number.isSafeInteger(match?.id)) continue;
+            const path = "/" + k + "/" + match.id;
+            const info = await tmdb(path, {
+              append_to_response: "credits,recommendations",
+            });
+            return {
+              source: "TMDB",
+              title: info.title || info.name || title,
+              article: "https://www.themoviedb.org" + path,
+              image: image(info.poster_path),
+              backdrop: image(info.backdrop_path, "w1280"),
+              overview: info.overview || "",
+              runtime: info.runtime || info.episode_run_time?.[0] || null,
+              rating: info.vote_count ? info.vote_average : null,
+              genres: (info.genres || []).map((genre) => genre.name),
+              cast: (info.credits?.cast || []).slice(0, 8).map((p) => p.name),
+              recommendations: (info.recommendations?.results || [])
+                .slice(0, 10)
+                .map(movieCard),
+            };
+          } catch {}
+        }
       }
       return null;
     });
@@ -281,43 +300,45 @@ export function createMetadata({ read = readRemote, env = process.env } = {}) {
     );
   }
   function rating(movie) {
-    if (!configured(env.OMDB_API_KEY)) return null;
     const type = mediaKind(movie) === "tv" ? "series" : "movie";
     return share(
       JSON.stringify(["rating", movie.title, movie.year, type]),
       async () => {
-        const data = await json(
-          apiUrl("https://www.omdbapi.com/", {
-            apikey: env.OMDB_API_KEY,
-            t: clean(movie.title),
-            y: movie.year || "",
-            type,
-            plot: "short",
-          }),
-          6000,
-        );
-        if (data.Response === "False") {
-          if (/key|limit/i.test(data.Error || ""))
-            throw new Error("Rating provider unavailable");
-          return null;
+        if (configured(env.OMDB_API_KEY)) {
+          try {
+            const data = await json(
+              apiUrl("https://www.omdbapi.com/", {
+                apikey: env.OMDB_API_KEY,
+                t: clean(movie.title),
+                y: movie.year || "",
+                type,
+                plot: "short",
+              }),
+              6000,
+            );
+            if (data.Response !== "False" && (!movie.year || parseInt(data.Year,10) === movie.year)) {
+              const score = Number(data.imdbRating);
+              const voteText = String(data.imdbVotes || "").replaceAll(",", "");
+              const votes = Number(voteText);
+              if (
+                /^\d+(\.\d+)?$/.test(data.imdbRating || "") &&
+                score <= 10 &&
+                (!voteText || Number.isSafeInteger(votes))
+              ) {
+                return { score, votes, id: data.imdbID, source: "IMDb" };
+              }
+            }
+          } catch {
+            /* fall back to TMDB rating */
+          }
         }
-        if (
-          !matchTitle(movie, [{ title: data.Title, release_date: data.Year }])
-        )
-          return null;
-        const score = Number(data.imdbRating);
-        const voteText = String(data.imdbVotes || "").replaceAll(",", "");
-        const votes = Number(voteText);
-        if (
-          !/^\d+(\.\d+)?$/.test(data.imdbRating || "") ||
-          score > 10 ||
-          !/^\d+$/.test(voteText) ||
-          !Number.isSafeInteger(votes) ||
-          votes < 1 ||
-          !/^tt\d+$/.test(data.imdbID || "")
-        )
-          return null;
-        return { score, votes, id: data.imdbID };
+        try {
+          const info = await lookup(movie);
+          if (info && info.rating) {
+            return { score: Number(info.rating), votes: null, id: null, source: "TMDB" };
+          }
+        } catch {}
+        return null;
       },
     );
   }
@@ -337,55 +358,66 @@ export function createMetadata({ read = readRemote, env = process.env } = {}) {
       ((kind === "tv" || term !== base) && candidates.length === 1 && candidates[0].y <= year && candidates[0]);
     if (!best) return null;
     return { source: "IMDb", article: "https://www.imdb.com/title/" + best.id + "/",
-      image: best.i.imageUrl.replace(/(?:\._V1_[^/]*)?\.jpg$/i, "._V1_QL80_UX360_.jpg") };
+      image: best.i.imageUrl.replace(/(?:\._V1_[^/]*)?\.jpg$/i, "._V1_FMjpg_UX1000_.jpg") };
   }
+  const artCache = new Map();
   async function artwork(title, year, kind = "movie") {
-    try {
-      const info = await lookup({ title, year, kind });
-      if (info?.image) return info;
-    } catch {
-      /* Fall back to attributed artwork. */
-    }
-    if (!/^\d{4}$/.test(String(year))) return null;
-    const key = normalize(title) + ":" + year;
-    return share("wiki:" + kind + ":" + key, async () => {
+    const cacheKey = [title, year, kind].join(':').toLowerCase();
+    if (artCache.has(cacheKey)) return artCache.get(cacheKey);
+    const res = await (async () => {
       try {
-        const poster = await imdbPoster(title, Number(year), kind);
-        if (poster) return poster;
-      } catch { /* Continue to Wikimedia. */ }
-      const name = title.replaceAll("|", " ");
-      const type = kind === "tv" ? "TV series" : "film";
-      const queries = [
-        {
-          titles: `${name} (${year} ${type})|${name} (${type})|${name}`,
-          redirects: 1,
-        },
-        { generator: "search", gsrsearch: `${name} ${year} ${type}`, gsrlimit: 6 },
-      ];
-      for (const query of queries) {
-        const data = await json(
-          apiUrl(WIKI + "/w/api.php", {
-            action: "query",
-            format: "json",
-            formatversion: 2,
-            prop: "pageimages|description|extracts",
-            piprop: "thumbnail",
-            pithumbsize: 420,
-            pilicense: "any",
-            pilimit: 6,
-            exintro: 1,
-            explaintext: 1,
-            exlimit: 6,
-            exchars: 950,
-            ...query,
-          }),
-          3500,
-        );
-        const art = wikiMatch(title, year, data.query?.pages || [], kind);
-        if (art) return art;
+        const info = await lookup({ title, year, kind });
+        if (info?.image) return info;
+      } catch {
+        /* Fall back to attributed artwork. */
       }
-      return null;
-    });
+      const y = Number(year) || null;
+      const key = normalize(title) + ":" + (y || "");
+      return share("wiki:" + kind + ":" + key, async () => {
+        try {
+          const poster = await imdbPoster(title, y, kind);
+          if (poster) return poster;
+        } catch { /* Continue to Wikimedia. */ }
+        if (!y) return null;
+        const name = title.replaceAll("|", " ");
+        const type = kind === "tv" ? "TV series" : "film";
+        const queries = [
+          {
+            titles: `${name} (${year} ${type})|${name} (${type})|${name}`,
+            redirects: 1,
+          },
+          { generator: "search", gsrsearch: `${name} ${year} ${type}`, gsrlimit: 6 },
+        ];
+        for (const query of queries) {
+          const data = await json(
+            apiUrl(WIKI + "/w/api.php", {
+              action: "query",
+              format: "json",
+              formatversion: 2,
+              prop: "pageimages|description|extracts",
+              piprop: "thumbnail",
+              pithumbsize: 1000,
+              pilicense: "any",
+              pilimit: 6,
+              exintro: 1,
+              explaintext: 1,
+              exlimit: 6,
+              exchars: 950,
+              ...query,
+            }),
+            3500,
+          );
+          const art = wikiMatch(title, year, data.query?.pages || [], kind);
+          if (art) return art;
+        }
+        return null;
+      });
+    })();
+    if (res) {
+      if (artCache.size > 500) artCache.delete(artCache.keys().next().value);
+      artCache.set(cacheKey, res);
+    }
+    return res;
   }
   async function trailer({ title, year }) {
     const key = normalize(title) + ":" + year;
@@ -403,6 +435,37 @@ export function createMetadata({ read = readRemote, env = process.env } = {}) {
       return null;
     }
   }
-  return { lookup, discovery, artwork, rating, trailer };
+  async function seasonDetails(movie, seasonNum = 1) {
+    if (!configured(env.TMDB_API_KEY)) return null;
+    const { title, year } = movie;
+    return share(JSON.stringify(["season", title, year, seasonNum]), async () => {
+      try {
+        const kindsToTry = ["tv", "movie"];
+        for (const k of kindsToTry) {
+          const found = await tmdb("/search/" + k, {
+            query: clean(title) || title,
+            include_adult: "false",
+          });
+          const match = matchTitle(movie, found.results || []);
+          if (!Number.isSafeInteger(match?.id)) continue;
+          const seasonData = await tmdb(`/tv/${match.id}/season/${seasonNum}`);
+          if (seasonData?.episodes?.length) {
+            return {
+              season: seasonNum,
+              episodes: seasonData.episodes.map(ep => ({
+                episode: ep.episode_number,
+                title: ep.name || `Episode ${ep.episode_number}`,
+                rating: ep.vote_count ? Number(ep.vote_average).toFixed(1) : null,
+                overview: ep.overview || "",
+                image: image(ep.still_path, "w500"),
+              })),
+            };
+          }
+        }
+      } catch {}
+      return null;
+    });
+  }
+  return { lookup, discovery, artwork, rating, trailer, seasonDetails };
 }
-export const { lookup, discovery, artwork, rating, trailer } = createMetadata();
+export const { lookup, discovery, artwork, rating, trailer, seasonDetails } = createMetadata();

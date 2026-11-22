@@ -35,9 +35,9 @@ test("metadata searches the clean title, distinguishes remakes and shares concur
     service.lookup(dune),
   ]);
   assert.deepEqual(one, two);
-  assert.equal(one.image, "https://image.tmdb.org/t/p/w500/dune.jpg");
+  assert.equal(one.image, "https://image.tmdb.org/t/p/w780/dune.jpg");
   assert.equal(one.rating, 8.1);
-  assert.equal(calls.length, 3);
+  assert.deepEqual(calls, ["/3/search/movie", "/3/movie/2"]);
 });
 
 test("OMDb checks release and rating data", async () => {
@@ -56,6 +56,7 @@ test("OMDb checks release and rating data", async () => {
     id: "tt1160419",
     score: 8,
     votes: 950123,
+    source: "IMDb",
   });
   assert.equal(await service.rating({ ...dune, year: 1984 }), null);
 });

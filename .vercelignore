@@ -3,3 +3,5 @@ instance/
 *.zip
 .env
 .env.*
+
+admin-data.json

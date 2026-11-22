@@ -1,6 +1,6 @@
-# Afterframe
+# AfterShow
 
-Afterframe is a movie browser built with Node.js, Express, and browser JavaScript. Search Tamil and dubbed movie catalogues, open a title to view its information, and choose a stream or download when the source offers one.
+AfterShow is a movie browser built with Node.js, Express, and browser JavaScript. Search Tamil and dubbed movie catalogues, open a title to view its information, and choose a stream or download when the source offers one.
 
 ## Run locally
 
@@ -28,7 +28,7 @@ Copy `.env.example` to `.env` if you want to customize the port or add keys. Nod
 | OMDB_API_KEY | IMDb rating and vote count from OMDb |
 | MOVIE_SECRET | Persistent signing secret for movie and media links. Production requires at least 32 characters |
 | TRUSTED_HOSTS | Comma-separated list of allowed incoming hostnames |
-| ISAIDUB_URL, MOVIEZDA_URL | HTTPS origins for the two live catalogues |
+| APPROVED_ORIGINS | Comma-separated extra HTTPS origins for custom links (optional) |
 
 Local development uses a temporary signing key. Set `MOVIE_SECRET` to keep links valid across restarts.
 
@@ -38,7 +38,9 @@ Import this repository as one project and use the Express framework preset. Use 
 
 Set `MOVIE_SECRET` for Preview and Production before deploying. Generate a value with `openssl rand -hex 32` and keep it stable across deployments. Add the optional metadata keys if available. Vercel deployment, branch and production hostnames are accepted automatically when system environment variables are enabled. Put any additional custom domains in `TRUSTED_HOSTS`.
 
-The app stores no catalogue, playback history or preferences. Opening a title checks the provider for current seasons, episodes and qualities.
+The provider catalogue URLs (isaidub, moviezda) are stored in the database and managed via the admin dashboard at `/admin/dashboard`. They are not configured via environment variables.
+
+The app stores no catalogue or playback history in the database. Opening a title checks the provider for current seasons, episodes and qualities.
 
 ## Tests
 

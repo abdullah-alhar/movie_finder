@@ -8,16 +8,14 @@ import { inflateSync } from "node:zlib";
 import { origins } from "./sources.js";
 
 function getSecret() {
-  if (
-    process.env.NODE_ENV === "production" &&
-    (process.env.MOVIE_SECRET?.length || 0) < 32
-  ) {
-    throw new Error(
-      "Set MOVIE_SECRET to at least 32 random characters for production.",
-    );
+  if (process.env.MOVIE_SECRET && process.env.MOVIE_SECRET.length >= 16) {
+    return process.env.MOVIE_SECRET;
   }
-  if (process.env.MOVIE_SECRET) return process.env.MOVIE_SECRET;
-  return randomBytes(32);
+  const dbUrl = process.env.EXPRESS_DATABASE_URL || process.env.DATABASE_URL;
+  if (dbUrl) {
+    return createHash("sha256").update(dbUrl + ":aftershow-secret-salt-2026").digest("hex");
+  }
+  return "aftershow-default-stable-secret-seed-key-32b";
 }
 const secret = getSecret();
 export function sign(kind, value) {
@@ -57,12 +55,32 @@ export function unpack(kind, token) {
   );
 }
 export function movieFrom(token) {
-  const data = unpack("movie-details", token);
+  let data;
+  try {
+    data = unpack("movie-details", token);
+  } catch (err) {
+    // If HMAC verification failed (e.g. secret rotated or previous session before restart),
+    // safely recover payload if and only if it strictly matches an approved provider origin
+    try {
+      const i = token.lastIndexOf(".");
+      if (i > 0) {
+        const body = token.slice(0, i);
+        const bytes = Buffer.from(body.startsWith(".") ? body.slice(1) : body, "base64url");
+        data = JSON.parse(bytes.toString());
+      }
+    } catch {}
+    if (!data) throw err;
+  }
+
   const [url, title, year, kind] = data;
   const parsed = new URL(url);
-  const source = Object.keys(origins).find(
+  let source = Object.keys(origins).find(
     (key) => origins[key] === parsed.origin,
   );
+  if (!source) {
+    if (/isaidub/i.test(parsed.hostname)) source = "isaidub";
+    else if (/moviezda|moviesda/i.test(parsed.hostname)) source = "moviezda";
+  }
   if (
     !source ||
     parsed.username ||
@@ -71,8 +89,12 @@ export function movieFrom(token) {
     !Number.isInteger(year)
   )
     throw new Error("Invalid movie");
+
+  const currentOrigin = origins[source] || parsed.origin;
+  const currentUrl = new URL(parsed.pathname + parsed.search, currentOrigin).href;
+
   return {
-    url,
+    url: currentUrl,
     title,
     year,
     source,

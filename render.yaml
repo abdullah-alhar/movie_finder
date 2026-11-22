@@ -1,19 +1,2 @@
-services:
-  - type: web
-    name: afterframe
-    runtime: node
-    plan: free
-    buildCommand: npm ci
-    startCommand: npm start
-    healthCheckPath: /health
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: "24"
-      - key: MOVIE_SECRET
-        generateValue: true
-      - key: TMDB_API_KEY
-        sync: false
-      - key: OMDB_API_KEY
-        sync: false
+# This project is deployed to Vercel — see README.md for setup instructions.
+# render.yaml is kept for reference only and is not used.
