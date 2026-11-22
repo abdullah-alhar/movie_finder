@@ -283,12 +283,17 @@ export async function showDetail(main) {
   }
   async function playSelected() {
     const target = selectedOption?.watch;
-    if (!target || video.getAttribute("src") !== target) return;
+    if (!target) return;
+    const currentSrc = video.getAttribute("src") || video.src || "";
+    if (!currentSrc.endsWith(target)) {
+      video.src = target;
+      video.load();
+    }
     try {
       status.textContent = "Opening video…";
       await video.play();
     } catch (error) {
-      if (error.name !== "AbortError" && video.getAttribute("src") === target) playbackFailed();
+      if (error.name !== "AbortError") playbackFailed();
     }
   }
   const episodeStatus = find(".episode-status");
@@ -307,7 +312,8 @@ export async function showDetail(main) {
     selectedOption = option;
     const target = option?.watch;
     if (target && /^\/watch\/[\w.-]+$/.test(target)) {
-      if (video.getAttribute("src") !== target) video.src = target;
+      const currentSrc = video.getAttribute("src") || video.src || "";
+      if (!currentSrc.endsWith(target)) video.src = target;
     } else if (video.hasAttribute("src")) resetPlayer();
     showEpisode("Selected");
   }
@@ -407,18 +413,25 @@ export async function showDetail(main) {
       const doSwitch = (i) => {
         const time = video.currentTime;
         const wasPlaying = !video.paused;
-        resetPlayer();
-        prepareOption(matches[i]);
-        if (time > 0) {
-          const target = matches[i].watch;
-          video.addEventListener("loadedmetadata", () => {
-            if (video.getAttribute("src") === target && Number.isFinite(video.duration))
-              video.currentTime = Math.min(time, video.duration);
-            if (wasPlaying) playSelected();
-          }, { once: true });
-        } else if (wasPlaying) {
-          playSelected();
-        }
+        const opt = matches[i];
+        if (!opt?.watch) return;
+        selectedOption = opt;
+        video.src = opt.watch;
+        video.load();
+        let readyDone = false;
+        const onReady = () => {
+          if (readyDone) return;
+          readyDone = true;
+          if (time > 0 && Number.isFinite(video.duration)) {
+            video.currentTime = Math.min(time, video.duration);
+          }
+          if (wasPlaying) {
+            video.play().catch(() => {});
+          }
+        };
+        video.addEventListener("loadedmetadata", onReady, { once: true });
+        video.addEventListener("canplay", onReady, { once: true });
+        setTimeout(onReady, 400);
         window.__movieQualities?.forEach((q, idx) => { q.active = (idx === i); });
         window.dispatchEvent(new CustomEvent('af:qualities-updated'));
       };

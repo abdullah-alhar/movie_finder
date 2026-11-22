@@ -162,179 +162,234 @@ function setupInPlayerQuality(video, skin) {
       const style = document.createElement('style');
       style.id = 'af-gear-quality-style';
       style.textContent = `
-        .af-qi-box {
-          display: flex;
-          flex-direction: column;
-          padding: 4px 0;
-          max-height: 240px;
-          overflow-y: auto;
+        /* Hide Video.js 10's built-in disabled quality item and group */
+        media-menu-item:has(media-text[token="menu.quality"]),
+        media-menu-content:has(media-quality-radio-group),
+        media-quality-radio-group {
+          display: none !important;
         }
-        .af-qi-item {
+
+        .af-quality-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 10px 16px;
-          font-size: 14px;
-          color: rgba(255, 255, 255, 0.85);
-          background: none;
-          border: none;
+          padding: 8px 12px;
           cursor: pointer;
-          width: 100%;
-          text-align: left;
+          border-radius: var(--media-menu-item-radius, 6px);
+          color: rgba(255, 255, 255, 0.88);
+          font-size: 14px;
           font-family: inherit;
           transition: background 0.12s;
-          border-radius: 6px;
+          user-select: none;
         }
-        .af-qi-item:hover {
+        .af-quality-row:hover {
           background: rgba(255, 255, 255, 0.1);
           color: #fff;
         }
-        .af-qi-item.active {
+        .af-qr-left {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .af-qr-right {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 13px;
+        }
+        media-menu:has(.af-quality-panel.open),
+        .media-menu-popup:has(.af-quality-panel.open) {
+          height: auto !important;
+          min-height: 190px !important;
+          max-height: 320px !important;
+        }
+        .af-quality-panel {
+          position: absolute;
+          inset: 0;
+          height: 100%;
+          min-height: 190px;
+          background: #16161c !important;
+          border-radius: inherit;
+          z-index: 99;
+          display: none;
+          flex-direction: column;
+          padding: 8px 6px;
+          box-sizing: border-box;
+          min-width: 170px;
+        }
+        .af-quality-panel.open {
+          display: flex;
+        }
+        .af-qp-back {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          background: none;
+          border: none;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-size: 14px;
+          font-weight: 600;
+          font-family: inherit;
+          cursor: pointer;
+          width: 100%;
+          text-align: left;
+          border-radius: 4px;
+        }
+        .af-qp-back:hover {
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .af-qp-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          padding: 6px 0;
+          max-height: 220px;
+          overflow-y: auto;
+        }
+        .af-qp-opt {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 12px;
+          background: none;
+          border: none;
+          color: rgba(255, 255, 255, 0.85);
+          font-size: 14px;
+          font-family: inherit;
+          cursor: pointer;
+          border-radius: 6px;
+          width: 100%;
+          text-align: left;
+          transition: background 0.12s;
+        }
+        .af-qp-opt:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
+        .af-qp-opt.active {
           color: #fff;
           font-weight: 600;
         }
-        .af-qi-check {
+        .af-qp-check {
           color: var(--media-primary-color, #ff6b3d);
-          font-size: 16px;
+          font-size: 15px;
           font-weight: 700;
         }
       `;
       sr.appendChild(style);
     }
 
-    // 1. Try to find the built-in Video.js 10 Quality menu item
-    const qualityText = sr.querySelector('media-text[token="menu.quality"]');
-    let qualityItem = qualityText?.closest('media-menu-item');
-    let qualityContent = null;
+    // Hide any built-in disabled quality trigger Video.js 10 added
+    sr.querySelectorAll('media-menu-item').forEach(item => {
+      if (item.querySelector('media-text[token="menu.quality"]')) {
+        item.style.setProperty('display', 'none', 'important');
+      }
+    });
 
-    if (qualityItem) {
-      const contentId = qualityItem.getAttribute('commandfor');
-      if (contentId) {
-        try {
-          qualityContent = sr.querySelector(`[id="${contentId}"]`);
-        } catch {
-          qualityContent = null;
+    // Find the Speed item to locate the main menu content container
+    const speedText = sr.querySelector('media-text[token="menu.speed"]');
+    const speedItem = speedText?.closest('media-menu-item') || sr.querySelector('media-menu-item[commandfor]');
+    if (!speedItem) return;
+
+    const menuPopup = speedItem.closest('media-menu') || speedItem.parentNode;
+    const topContent = speedItem.closest('media-menu-content') || speedItem.parentNode;
+
+    // Build or get our custom Quality Row inside topContent
+    let qualityRow = topContent.querySelector('.af-quality-row');
+    if (!qualityRow) {
+      qualityRow = document.createElement('div');
+      qualityRow.className = 'af-quality-row';
+      qualityRow.setAttribute('role', 'button');
+      qualityRow.setAttribute('tabindex', '0');
+      qualityRow.innerHTML = `
+        <div class="af-qr-left">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Quality</span>
+        </div>
+        <div class="af-qr-right">
+          <span class="af-qr-val"></span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
+        </div>
+      `;
+      topContent.insertBefore(qualityRow, speedItem);
+    }
+
+    // Build or get our custom Quality Panel inside menuPopup
+    let panel = menuPopup.querySelector('.af-quality-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'af-quality-panel';
+      panel.innerHTML = `
+        <button type="button" class="af-qp-back">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
+          Quality
+        </button>
+        <div class="af-qp-list"></div>
+      `;
+      menuPopup.appendChild(panel);
+    }
+
+    const closePanel = () => {
+      panel.classList.remove('open');
+      topContent.style.visibility = '';
+      menuPopup.style.removeProperty('min-height');
+      menuPopup.style.removeProperty('height');
+    };
+
+    const openPanel = () => {
+      panel.classList.add('open');
+      topContent.style.visibility = 'hidden';
+      const calcHeight = Math.max(190, 55 + quals.length * 40);
+      menuPopup.style.setProperty('min-height', `${calcHeight}px`, 'important');
+      menuPopup.style.setProperty('height', `${calcHeight}px`, 'important');
+    };
+
+    panel.querySelector('.af-qp-back').onclick = (e) => {
+      e.stopPropagation();
+      closePanel();
+    };
+
+    // When the menu popup closes, make sure the panel resets
+    if (!menuPopup._afResetBound) {
+      menuPopup._afResetBound = true;
+      const obs = new MutationObserver(() => {
+        if (menuPopup.hasAttribute('hidden') || menuPopup.style.display === 'none') {
+          closePanel();
         }
-      }
-      if (!qualityContent) {
-        qualityContent = sr.querySelector('media-menu-content media-quality-radio-group')?.closest('media-menu-content') || null;
-      }
+      });
+      obs.observe(menuPopup, { attributes: true, attributeFilter: ['hidden', 'style'] });
     }
 
-    // 2. If built-in item not found, create one next to Speed item using native commandfor
-    if (!qualityItem) {
-      const speedText = sr.querySelector('media-text[token="menu.speed"]');
-      const speedItem = speedText?.closest('media-menu-item') || sr.querySelector('media-menu-item[commandfor]');
-      if (!speedItem) return;
-
-      const menuPopup = speedItem.closest('media-menu') || speedItem.parentNode;
-      const topContent = speedItem.closest('media-menu-content') || speedItem.parentNode;
-
-      qualityItem = topContent.querySelector('.af-custom-quality-trigger');
-      if (!qualityItem) {
-        qualityItem = document.createElement('media-menu-item');
-        qualityItem.className = 'media-menu-trigger-item af-custom-quality-trigger';
-        qualityItem.setAttribute('commandfor', 'af-quality-content');
-        qualityItem.innerHTML = `
-          <media-icon name="switches" class="media-menu-trigger-item-icon">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </media-icon>
-          <media-text>Quality</media-text>
-          <span class="media-menu-hint">
-            <span class="af-quality-label"></span>
-            <media-icon name="chevron" class="media-menu-forward-chevron">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
-            </media-icon>
-          </span>
-        `;
-        topContent.insertBefore(qualityItem, speedItem);
-      }
-
-      qualityContent = menuPopup.querySelector('#af-quality-content');
-      if (!qualityContent) {
-        qualityContent = document.createElement('media-menu-content');
-        qualityContent.className = 'media-menu-content';
-        qualityContent.id = 'af-quality-content';
-        qualityContent.innerHTML = `
-          <media-menu-item class="media-menu-back-item">
-            <media-icon name="chevron" class="media-menu-back-chevron">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
-            </media-icon>
-            <media-text>Quality</media-text>
-          </media-menu-item>
-          <media-menu-separator class="media-menu-separator"></media-menu-separator>
-        `;
-        menuPopup.appendChild(qualityContent);
-      }
-    }
-
-    if (!qualityItem || !qualityContent) return;
-
-    // Show/hide Quality item depending on whether options are available
+    // Show/hide based on whether multiple qualities exist
     if (quals.length <= 1) {
-      qualityItem.style.display = 'none';
-      qualityItem.setAttribute('hidden', '');
+      qualityRow.style.display = 'none';
+      closePanel();
       return;
     }
 
-    qualityItem.style.display = 'flex';
-    qualityItem.removeAttribute('hidden');
+    qualityRow.style.display = 'flex';
+    const valEl = qualityRow.querySelector('.af-qr-val');
+    if (valEl) valEl.textContent = activeQ ? activeQ.name : '';
 
-    // Prevent Video.js 10 from re-hiding the Quality item
-    if (!qualityItem._afObserved) {
-      qualityItem._afObserved = true;
-      const obs = new MutationObserver(() => {
-        const qList = window.__movieQualities || [];
-        if (qList.length > 1 && qualityItem.hasAttribute('hidden')) {
-          qualityItem.removeAttribute('hidden');
-          qualityItem.style.display = 'flex';
-        }
-      });
-      obs.observe(qualityItem, { attributes: true, attributeFilter: ['hidden', 'style'] });
-    }
+    // Click on Quality row opens panel
+    qualityRow.onclick = (e) => {
+      e.stopPropagation();
+      openPanel();
+    };
 
-    // Hide Video.js 10's built-in "Auto" label on the trigger, and display our real resolution
-    const defaultVal = qualityItem.querySelector('[data-part="value"]');
-    if (defaultVal) defaultVal.style.display = 'none';
-
-    let customVal = qualityItem.querySelector('.af-quality-label');
-    if (!customVal) {
-      customVal = document.createElement('span');
-      customVal.className = 'af-quality-label';
-      customVal.style.cssText = 'font-size:13px;color:rgba(255,255,255,0.6);margin-right:4px;';
-      const hintWrap = qualityItem.querySelector('.media-menu-hint') || qualityItem;
-      hintWrap.prepend(customVal);
-    }
-    customVal.textContent = activeQ ? activeQ.name : '';
-
-    // Hide Video.js 10's native <media-quality-radio-group> so "Auto" is not rendered
-    const nativeRadioGroup = qualityContent.querySelector('media-quality-radio-group');
-    if (nativeRadioGroup) {
-      nativeRadioGroup.style.display = 'none';
-    }
-
-    // Populate options inside qualityContent
-    let optBox = qualityContent.querySelector('.af-qi-box');
-    if (!optBox) {
-      optBox = document.createElement('div');
-      optBox.className = 'af-qi-box';
-      // Append right after separator or at the end
-      const sep = qualityContent.querySelector('media-menu-separator');
-      if (sep && sep.nextSibling) {
-        qualityContent.insertBefore(optBox, sep.nextSibling);
-      } else {
-        qualityContent.appendChild(optBox);
-      }
-    }
-    optBox.innerHTML = '';
-
+    // Populate panel options
+    const listEl = panel.querySelector('.af-qp-list');
+    listEl.innerHTML = '';
     quals.forEach(q => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'af-qi-item' + (q.active ? ' active' : '');
+      btn.className = 'af-qp-opt' + (q.active ? ' active' : '');
       btn.innerHTML = `
-        <span class="af-qi-name">${esc(q.name)}</span>
-        <span class="af-qi-check" style="${q.active ? '' : 'visibility:hidden'}">✓</span>
+        <span>${esc(q.name)}</span>
+        <span class="af-qp-check" style="${q.active ? '' : 'visibility:hidden'}">✓</span>
       `;
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -345,17 +400,10 @@ function setupInPlayerQuality(video, skin) {
           video.dataset.pendingPlay   = String(wasPlay);
           q.select();
         }
-        // Update label immediately
-        if (customVal) customVal.textContent = q.name;
-        // Go back to main menu
-        try {
-          const backBtn = qualityContent.querySelector('.media-menu-back-item');
-          if (backBtn) {
-            backBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-          }
-        } catch {}
+        if (valEl) valEl.textContent = q.name;
+        closePanel();
       };
-      optBox.appendChild(btn);
+      listEl.appendChild(btn);
     });
   }
 
