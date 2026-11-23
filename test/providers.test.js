@@ -61,6 +61,26 @@ test("search continuation fetches only the next window", async () => {
   );
 });
 
+test("short-lived listing cache shares upstream requests for simultaneous searches", async () => {
+  const catalog = site + "/tamil-atoz-dubbed-movies/d";
+  const series = site + "/tamil-dubbed-web-series/";
+  const calls = [];
+  const service = createProviders(async url => {
+    calls.push(url);
+    const href = url === series ? "/movie/another-web-series/" : new URL(film).pathname;
+    const title = url === series ? "Another (2026)" : "Dune (2021)";
+    return { url, html: `<a href="${href}">${title}</a>` };
+  }, { listingTtl: 15_000 });
+  const params = { source: "isaidub", q: "dune" };
+  const results = await Promise.all([service.catalogue(params), service.catalogue(params)]);
+  const repeated = await service.catalogue(params);
+  assert.deepEqual(results[0], results[1]);
+  assert.deepEqual(repeated, results[0]);
+  assert.equal(repeated.items[0].url, film);
+  assert.equal(calls.filter(url => url === catalog).length, 1);
+  assert.equal(calls.filter(url => url === series).length, 1);
+});
+
 test("episodes retain parent season, quality, and file-specific size", async () => {
   const seasonFolder = site + "/movie/123/",
     qualityFolder = site + "/movie/456/";
@@ -162,4 +182,62 @@ test("live series listings, posters and later episode pages stay reachable", asy
     versions.options.map((o) => o.episode),
     [1, 2],
   );
+});
+
+test("long seasons follow all episode pages even after the first 20 options", async () => {
+  const origin = "https://moviezda.co";
+  const root = origin + "/bigg-boss-2026-tamil-web-series/";
+  const season = "/bigg-boss-season-10-web-series/";
+  const responses = {
+    [root]: `<a href="${season}">Bigg Boss (Season 10)</a>`,
+  };
+  for (let page = 1; page <= 4; page++) {
+    const end = 77 - (page - 1) * 20;
+    const links = Array.from({ length: Math.min(20, end) }, (_, i) =>
+      `<a href="/download/episode-${end - i}/">Epi ${end - i}</a>`).join("");
+    responses[origin + season + (page === 1 ? "" : `?page=${page}`)] =
+      links + (page < 4 ? `<a href="?page=${page + 1}">Next</a>` : "") +
+      (page > 1 ? `<a href="/download/episode-${end + 1}/">Epi ${end + 1}</a>` : "");
+  }
+  const lastPage = origin + season + "?page=4";
+  const lastHtml = responses[lastPage];
+  delete responses[lastPage];
+  const service = fixture(responses);
+  const movie = { url: root, kind: "tv" };
+  const partial = await service.options(movie);
+  assert.equal(partial.options.length, 60);
+  assert.equal(partial.unavailable, true);
+  responses[lastPage] = lastHtml;
+  const complete = await service.options(movie);
+  assert.equal(complete.unavailable, false);
+  assert.equal(complete.options.length, 77);
+  assert.ok(complete.options.every(option => option.season === 10));
+  assert.deepEqual(complete.options.map(option => option.episode).sort((a, b) => a - b),
+    Array.from({ length: 77 }, (_, i) => i + 1));
+});
+
+test("verified season listings group across directory pages, but overlapping seasons stay separate", async () => {
+  const origin = "https://moviezda.co";
+  const directory = origin + "/tamil-web-series-download/";
+  const second = "/heart-beat-2025-tamil-movie/";
+  const third = "/heart-beat-2026-tamil-web-series/";
+  const pages = {
+    [origin + "/tamil-movies/h/"]: `<a href="${second}">Heart Beat (2025)</a>`,
+    [directory]: `<i id="currentPage">1</i><i id="totalPages">2</i><a href="${third}">Heart Beat (2026)</a>`,
+    [directory + "?get-page=2"]: `<i id="currentPage">2</i><i id="totalPages">2</i><a href="${second}">Heart Beat (2025)</a>`,
+    [origin + second]: '<a href="/heart-beat-season-02-web-series/">Heart Beat (Season 02)</a>',
+    [origin + third]: '<a href="/heart-beat-season-03-web-series/">Heart Beat (Season 03)</a>',
+  };
+  const service = fixture(pages);
+  const group = await service.catalogue({ source: "moviezda", q: "heart beat" });
+  assert.equal(group.items.length, 1);
+  assert.deepEqual(group.items[0].seriesEntries, [
+    [origin + third, 2026, [3]], [origin + second, 2025, [2]],
+  ]);
+  const browse = page => service.catalogue({ source: "moviezda", category: "series", page });
+  assert.equal((await browse(1)).items.length, 1);
+  assert.equal((await browse(2)).items.length, 0);
+  pages[origin + third] = '<a href="/another-season-02-web-series/">Season 02</a>';
+  const overlap = await fixture(pages).catalogue({ source: "moviezda", q: "heart beat" });
+  assert.equal(overlap.items.length, 2);
 });

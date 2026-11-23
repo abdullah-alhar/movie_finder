@@ -95,26 +95,28 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 
 /* ─── Admin CSS ───────────────────────────────────────────────────────────── */
 const CSS = `
+<link rel="stylesheet" href="/brand.css">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
 *,*::before,*::after{box-sizing:border-box}
 :root{
-  --bg:#0b0b0e;--s1:#111116;--s2:#191920;--s3:#22222b;
-  --fg:#f1f0ec;--mu:#8d8b94;--fa:#44434c;
-  --ac:#ff6b3d;--ac2:#ff855f;--gr:#22c55e;--rd:#ef4444;--ye:#f59e0b;
-  --bo:rgba(255,255,255,.08);--ra:14px;
-  font-family:'Inter',system-ui,sans-serif;font-size:14.5px;line-height:1.5;color-scheme:dark
+  --bg:var(--as-ink);--s1:var(--as-slate);--s2:var(--as-raised);--s3:var(--as-hover);
+  --fg:var(--as-paper);--mu:#a9b8cd;
+  --ac:var(--as-blue);--ac2:var(--as-blue-hover);--gr:#86efac;--rd:#fca5a5;--ye:#fde68a;
+  --bo:rgba(255,255,255,.10);--ra:8px;
+  font-family:var(--as-type-ui);font-size:14.5px;line-height:1.5;color-scheme:dark
 }
 body{margin:0;background:var(--bg);color:var(--fg);min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
 h1,h2,h3{margin:0;font-family:'Fraunces',Georgia,serif;line-height:1.15}
 p{margin:0}a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 input,select,textarea{font:inherit;color:inherit;background:var(--s2);border:1px solid var(--bo);border-radius:9px;padding:10px 14px;width:100%;outline:none;transition:border-color .15s;box-sizing:border-box}
-input:focus,select:focus,textarea:focus{border-color:var(--ac);box-shadow:0 0 0 3px rgba(255,107,61,0.15)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:9px;font:600 14px/1 inherit;border:none;cursor:pointer;transition:all .15s ease;text-decoration:none}
+input:focus,select:focus,textarea:focus{border-color:var(--ac);box-shadow:0 0 0 3px rgba(var(--as-blue-rgb),.15)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:9px;font:inherit;font-size:14px;font-weight:600;line-height:1.2;border:none;cursor:pointer;transition:all .15s ease;text-decoration:none}
 .btn:active{transform:scale(.97)}
-.bp{background:var(--ac);color:#fff}.bp:hover{background:var(--ac2);box-shadow:0 4px 16px rgba(255,107,61,.35)}
+.bp{background:var(--ac);color:var(--bg)}.bp:hover{background:var(--ac2)}
 .bs{background:var(--s2);color:var(--fg);border:1px solid var(--bo)}.bs:hover{background:var(--s3);border-color:rgba(255,255,255,.15)}
-.bd{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3)}.bd:hover{background:var(--rd);color:#fff}
-.bgr{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.3)}.bgr:hover{background:var(--gr);color:#fff}
+.bd{background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.3)}.bd:hover{background:var(--rd);color:var(--bg)}
+.bgr{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.3)}.bgr:hover{background:var(--gr);color:var(--bg)}
 .bsm{padding:6px 13px;font-size:13px;border-radius:7px}
 .card{background:var(--s1);border:1px solid var(--bo);border-radius:var(--ra);padding:24px;margin-bottom:20px;box-shadow:0 8px 30px rgba(0,0,0,0.4)}
 .al{padding:12px 16px;border-radius:10px;font-size:13.5px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
@@ -126,9 +128,9 @@ label{font-size:12px;font-weight:700;color:var(--mu);text-transform:uppercase;le
 code{background:var(--s3);border-radius:5px;padding:2px 6px;font-size:12.5px;color:var(--ac2);font-family:monospace}
 .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--s3);color:var(--mu)}
 .badge-green{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.3)}
-.badge-orange{background:rgba(255,107,61,.15);color:var(--ac2);border:1px solid rgba(255,107,61,.3)}
+.badge-event{background:rgba(var(--as-blue-rgb),.12);color:var(--ac2);border:1px solid rgba(var(--as-blue-rgb),.25)}
 :focus-visible{outline:2px solid var(--ac2);outline-offset:2px;border-radius:6px}
-.admin-nav{position:fixed;top:0;left:0;right:0;min-height:56px;background:rgba(11,11,14,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bo);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;z-index:100}
+.admin-nav{position:fixed;top:0;left:0;right:0;min-height:56px;background:var(--as-rail);border-bottom:1px solid var(--bo);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;z-index:100}
 .admin-brand{display:flex;align-items:center;gap:12px;min-width:0}
 .admin-brand-name{font-family:'Fraunces',Georgia,serif;font-weight:800;font-size:18px;white-space:nowrap}
 .admin-actions{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--mu);min-width:0}
@@ -137,9 +139,9 @@ code{background:var(--s3);border-radius:5px;padding:2px 6px;font-size:12.5px;col
 .admin-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .msg-wrap{width:100%;max-width:420px}
 .msg-card{text-align:center}
-.msg-card h2{font-size:20px;margin-bottom:8px}
+.msg-card h1{font-size:20px;margin-bottom:8px}
 .msg-card p{color:var(--mu);font-size:14px;margin-bottom:18px;line-height:1.55}
-.login-mark{width:48px;height:48px;margin:0 auto 10px}
+.login-mark{display:block;width:48px;height:48px;margin:0 auto 10px}
 .login-back{display:block;text-align:center;font-size:12.5px;color:var(--mu);margin-top:18px}
 .login-back:hover{color:var(--fg);text-decoration:none}
 @media (max-width:720px){
@@ -147,9 +149,8 @@ code{background:var(--s3);border-radius:5px;padding:2px 6px;font-size:12.5px;col
   .admin-actions{width:100%;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .admin-email{display:none}
   input,select,textarea{font-size:16px}
-}
-@media (max-width:420px){
-  .admin-brand .badge{display:none}
+  .btn,.admin-site-link{min-height:44px}
+  .card{padding:18px}
 }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -157,10 +158,10 @@ code{background:var(--s3);border-radius:5px;padding:2px 6px;font-size:12.5px;col
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">`;
 
 function navHTML(email, csrf) {
-  return `<nav class="admin-nav">
+  return `<nav class="admin-nav" aria-label="Admin navigation">
     <div class="admin-brand">
-      <span class="admin-brand-name"><span style="color:var(--ac)">After</span>Show Admin</span>
-      <span class="badge badge-green">LIVE SYNCED</span>
+      <img src="/icon.svg" alt="" width="32" height="32">
+      <span class="admin-brand-name">After<span style="color:var(--ac)">Show</span> Admin</span>
     </div>
     <div class="admin-actions">
       <a href="/" target="_blank" class="admin-site-link">Open Site ↗</a>
@@ -174,7 +175,7 @@ function navHTML(email, csrf) {
 }
 
 function messagePage(title, message, actionHref = '/admin/login', actionText = '← Back to sign in') {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · AfterShow Admin</title>${CSS}</head><body><div class="msg-wrap"><div class="card msg-card"><h2>${esc(title)}</h2><p>${esc(message)}</p><a class="btn bs" href="${esc(actionHref)}">${esc(actionText)}</a></div></div></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · AfterShow Admin</title>${CSS}</head><body><main class="msg-wrap"><div class="card msg-card"><h1>${esc(title)}</h1><p role="alert">${esc(message)}</p><a class="btn bs" href="${esc(actionHref)}">${esc(actionText)}</a></div></main></body></html>`;
 }
 
 /* ─── Root Redirect ───────────────────────────────────────────────────────── */
@@ -291,16 +292,18 @@ body{align-items:flex-start;justify-content:flex-start;padding:76px 24px 60px}
 .wrap{max-width:920px;width:100%;margin:0 auto}
 .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:24px}
 .page-title{font-size:clamp(24px,4.5vw,30px);margin-bottom:6px}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bo);margin-bottom:28px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bo);margin-bottom:28px;overflow-x:auto;scrollbar-width:thin}
 .tab{padding:11px 20px;font-size:14px;font-weight:600;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;flex:0 0 auto;white-space:nowrap}
 .tab:hover{color:var(--fg)}
+.tab:focus-visible{outline-offset:-3px}
 .tab.on,.tab[aria-selected="true"]{color:var(--ac);border-bottom-color:var(--ac)}
 .pane{display:none}.pane.on{display:block}
 .lr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--bo);flex-wrap:wrap}
 .lr:last-child{border-bottom:0}
 .lt{flex:1;min-width:0}
 .ll{font-size:14px;font-weight:600}
+.ll,.logr,.ping-res,.link-notes{overflow-wrap:anywhere}
+.link-notes{font-size:12px;color:var(--mu);margin-top:3px}
 .lu{font-size:12.5px;color:var(--mu);margin-top:2px;overflow-wrap:anywhere}
 .lr-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .logr{font-size:13px;padding:8px 0;border-bottom:1px solid var(--bo);display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
@@ -317,13 +320,14 @@ body{align-items:flex-start;justify-content:flex-start;padding:76px 24px 60px}
 .stat-val{font-size:clamp(18px,3vw,24px);font-weight:800;color:var(--ac);font-family:'Fraunces',Georgia,serif;overflow-wrap:anywhere}
 .stat-lbl{font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;margin-top:4px}
 @media (max-width:720px){
-  body{padding:118px 16px 40px}
-  .wrap{max-width:100%}
-  .card{padding:18px}
+  body{padding:0 0 40px}
+  .admin-nav{position:sticky;width:100%}
+  .wrap{max-width:100%;padding:20px 16px 0}
   .tabs{margin-bottom:20px}
 }
 @media (max-width:560px){
   .logr .when{margin-left:0;width:100%}
+  .lt{flex-basis:100%}
   .lr-actions{width:100%;justify-content:flex-end}
 }
 </style>
@@ -335,16 +339,15 @@ ${navHTML(sess.email, sess.csrf)}
       <h1 class="page-title">Admin Dashboard</h1>
       <p style="color:var(--mu);font-size:14px">Manage provider links, dynamic domain routing, and scraping options.</p>
     </div>
-    <span class="badge badge-green">LIVE SYSTEM READY</span>
   </div>
 
   <div class="stats-grid">
     <div class="stat-card">
-      <div class="stat-val">${isaidubRunning.replace('https://', '')}</div>
+      <div class="stat-val">${esc(isaidubRunning.replace('https://', ''))}</div>
       <div class="stat-lbl">Active Isaidub Source</div>
     </div>
     <div class="stat-card">
-      <div class="stat-val">${moviezdaRunning.replace('https://', '')}</div>
+      <div class="stat-val">${esc(moviezdaRunning.replace('https://', ''))}</div>
       <div class="stat-lbl">Active Moviezda Source</div>
     </div>
     <div class="stat-card">
@@ -354,10 +357,10 @@ ${navHTML(sess.email, sess.csrf)}
   </div>
 
   <div class="tabs" role="tablist" aria-label="Dashboard sections">
-    <button type="button" id="tab-providers" class="tab on" data-tab="providers" role="tab" aria-selected="true" aria-controls="pane-providers" onclick="switchTab('providers')">Movie Providers</button>
-    <button type="button" id="tab-links" class="tab" data-tab="links" role="tab" aria-selected="false" aria-controls="pane-links" onclick="switchTab('links')">Custom Links</button>
-    <button type="button" id="tab-security" class="tab" data-tab="security" role="tab" aria-selected="false" aria-controls="pane-security" onclick="switchTab('security')">Security</button>
-    <button type="button" id="tab-activity" class="tab" data-tab="activity" role="tab" aria-selected="false" aria-controls="pane-activity" onclick="switchTab('activity')">Activity Log</button>
+    <button type="button" id="tab-providers" class="tab on" data-tab="providers" role="tab" aria-selected="true" aria-controls="pane-providers">Movie Providers</button>
+    <button type="button" id="tab-links" class="tab" data-tab="links" role="tab" aria-selected="false" aria-controls="pane-links" tabindex="-1">Custom Links</button>
+    <button type="button" id="tab-security" class="tab" data-tab="security" role="tab" aria-selected="false" aria-controls="pane-security" tabindex="-1">Security</button>
+    <button type="button" id="tab-activity" class="tab" data-tab="activity" role="tab" aria-selected="false" aria-controls="pane-activity" tabindex="-1">Activity Log</button>
   </div>
 
   <!-- ── Tab 1: Providers ── -->
@@ -370,17 +373,13 @@ ${navHTML(sess.email, sess.csrf)}
         </div>
       </div>
 
-      <div class="al as">
-        <span><strong>Real-time Sync Active:</strong> Changes apply instantly to all live scrapers without requiring a server reboot.</span>
-      </div>
-
       <form method="POST" action="/admin/update-config">
         <input type="hidden" name="_csrf" value="${esc(sess.csrf)}">
 
         <!-- Isaidub -->
         <div class="provider-box">
           <div class="provider-head">
-            <span class="provider-title">Isaidub Domain</span>
+            <label class="provider-title" for="isaidub_input">Isaidub domain</label>
             <button type="button" class="btn bs bsm" onclick="testPing('isaidub_input', 'ping_isaidub')">Test Connection</button>
           </div>
           <input id="isaidub_input" type="url" name="isaidub_url" value="${esc(cfg.isaidub_url || isaidubRunning)}" required placeholder="https://isaidub.green">
@@ -393,7 +392,7 @@ ${navHTML(sess.email, sess.csrf)}
         <!-- Moviezda -->
         <div class="provider-box">
           <div class="provider-head">
-            <span class="provider-title">Moviezda Domain</span>
+            <label class="provider-title" for="moviezda_input">Moviezda domain</label>
             <button type="button" class="btn bs bsm" onclick="testPing('moviezda_input', 'ping_moviezda')">Test Connection</button>
           </div>
           <input id="moviezda_input" type="url" name="moviezda_url" value="${esc(cfg.moviezda_url || moviezdaRunning)}" required placeholder="https://moviesda36.com">
@@ -439,7 +438,7 @@ ${navHTML(sess.email, sess.csrf)}
             <div class="lt">
               <div class="ll">${esc(l.label)}</div>
               <div class="lu"><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.url)}</a></div>
-              ${l.notes ? `<div style="font-size:11.5px;color:var(--fa);margin-top:3px">${esc(l.notes)}</div>` : ''}
+              ${l.notes ? `<div class="link-notes">${esc(l.notes)}</div>` : ''}
             </div>
             <div class="lr-actions">
               <a href="${esc(l.url)}" target="_blank" class="btn bs bsm">Open</a>
@@ -484,7 +483,7 @@ ${navHTML(sess.email, sess.csrf)}
       ? `<p style="color:var(--mu);font-size:13.5px">No audit entries yet.</p>`
       : log.map(l => `
           <div class="logr">
-            <span class="badge badge-orange">${esc(l.action)}</span>
+            <span class="badge badge-event">${esc(l.action)}</span>
             <span style="color:var(--fg);font-weight:500">${esc(l.who)}</span>
             <span class="when">${new Date(l.at).toLocaleString()}</span>
           </div>`).join('')}
@@ -494,8 +493,8 @@ ${navHTML(sess.email, sess.csrf)}
 
 <script>
 function switchTab(name) {
-  if (!name) return;
   var allTabs = ['providers', 'links', 'security', 'activity'];
+  if (!allTabs.includes(name)) return;
   for (var i = 0; i < allTabs.length; i++) {
     var key = allTabs[i];
     var isCurrent = (key === name);
@@ -506,15 +505,7 @@ function switchTab(name) {
       b.setAttribute('aria-selected', String(isCurrent));
       b.tabIndex = isCurrent ? 0 : -1;
     }
-    if (p) {
-      if (isCurrent) {
-        p.classList.add('on');
-        p.style.display = 'block';
-      } else {
-        p.classList.remove('on');
-        p.style.display = 'none';
-      }
-    }
+    if (p) p.classList.toggle('on', isCurrent);
   }
   try {
     history.replaceState(null, '', location.pathname + '#' + name);
@@ -522,7 +513,7 @@ function switchTab(name) {
 }
 window.switchTab = switchTab;
 
-// Event delegation on the tabs container so clicks NEVER fail even before full load
+// Activate the clicked dashboard tab.
 document.addEventListener('click', function(e) {
   var btn = e.target.closest('.tab');
   if (btn && btn.hasAttribute('data-tab')) {

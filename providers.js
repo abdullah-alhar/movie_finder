@@ -250,8 +250,8 @@ function pageQuality($) {
     .trim();
 }
 
-const season = /\b(?:season\s*|s)(\d{1,3})(?=\b|e\d)/i;
-const episode = /(?:\b(?:episode|epi|ep)\s*|(?<=\d)e|\bE)(\d{1,4})\b/i;
+const season = /\b(?:season[\s._-]*|s)(\d{1,3})(?=\b|e\d)/i;
+const episode = /(?:\b(?:episode|epi|ep)[\s._-]*|(?<=\d)e|\bE)(\d{1,4})\b/i;
 function releaseQuality(label) {
   const formats = [
     [/\b(?:hq[ -]*)?pre[ -]*dvd(?:rip)?\b/i, "PreDVD"],
@@ -296,15 +296,127 @@ function mediaFile(url) {
   );
 }
 
-export function createProviders(read = readHTML) {
+export function createProviders(read = readHTML, { listingTtl = 0 } = {}) {
+  const listings = new Map();
   async function listing(source, category, num) {
-    const { html, url } = await read(pageUrl(source, category, num));
-    const data = parseListing(html, url, source);
-    if (category.series)
-      data.items.forEach((item) => {
-        item.kind = "tv";
+    const address = pageUrl(source, category, num);
+    const key = `${source}:${category.series ? "tv" : "movie"}:${address}`;
+    const cached = listings.get(key);
+    if (cached && cached.expires > Date.now()) return cached.pending;
+    const pending = (async () => {
+      const { html, url } = await read(address);
+      const data = parseListing(html, url, source);
+      if (category.series) for (const item of data.items) item.kind = "tv";
+      return data;
+    })();
+    if (listingTtl > 0) {
+      if (listings.size >= 256) listings.delete(listings.keys().next().value);
+      listings.set(key, { pending, expires: Date.now() + listingTtl });
+      pending.catch(() => {
+        if (listings.get(key)?.pending === pending) listings.delete(key);
       });
-    return data;
+    }
+    return pending;
+  }
+
+  const seasonChecks = new Map();
+  async function seasonNumbers(movie) {
+    const cached = seasonChecks.get(movie.url);
+    if (cached?.until > Date.now()) return cached.result;
+    const result = (async () => {
+      try {
+        const { html, url } = await read(movie.url);
+        const $ = load(html);
+        const numbers = new Set();
+        $("a[href]").slice(0, 5000).each((_, el) => {
+          const link = safeURL($(el).attr("href"), url);
+          const number = $(el).text().match(season)?.[1];
+          if (link?.origin === origins[movie.source] && folder.test(link.pathname) && number)
+            numbers.add(Number(number));
+        });
+        return [...numbers].sort((a, b) => a - b);
+      } catch {
+        seasonChecks.delete(movie.url);
+        return [];
+      }
+    })();
+    if (seasonChecks.size >= 512) seasonChecks.delete(seasonChecks.keys().next().value);
+    seasonChecks.set(movie.url, { result, until: Date.now() + 120_000 });
+    return result;
+  }
+
+  async function groupSeries(items) {
+    const candidates = new Map();
+    for (const item of items) {
+      if (mediaKind(item) !== "tv") continue;
+      const title = normalize(item.title).replace(/\s+(?:season|s)\s*\d{1,3}$/, "");
+      const key = `${item.source}:${title}`;
+      if (!title) continue;
+      if (!candidates.has(key)) candidates.set(key, []);
+      candidates.get(key).push(item);
+    }
+    const replacements = new Map();
+    const groups = [...candidates.values()].filter(group =>
+      group.length >= 2 && group.length <= 8);
+    for (let i = 0; i < groups.length; i += 3) {
+      await Promise.all(groups.slice(i, i + 3).map(async group => {
+        const entries = await Promise.all(group.map(async item => ({
+          item,
+          seasons: await seasonNumbers(item),
+        })));
+        const complete = entries.filter(entry => entry.seasons.length);
+        // Separate runs/remakes can share a title. Never collapse overlapping
+        // numbering, or infer a season from the release year.
+        const seasons = complete.flatMap(entry => entry.seasons);
+        if (complete.length < 2 || new Set(seasons).size !== seasons.length) return;
+        complete.sort((a, b) => b.seasons.at(-1) - a.seasons.at(-1) || b.item.year - a.item.year);
+        const canonical = {
+          ...complete[0].item,
+          title: complete[0].item.title.replace(/[\s(–-]+(?:season|s)\s*\d{1,3}\)?$/i, ""),
+          seriesEntries: complete.map(({ item, seasons }) => [item.url, item.year, seasons]),
+        };
+        for (const { item } of complete) replacements.set(item.url, canonical);
+      }));
+    }
+    return [...new Set(items.map(item => replacements.get(item.url) || item))];
+  }
+
+  const directories = new Map();
+  async function seriesDirectory(source, category, start) {
+    // Compare adjacent provider pages before choosing the canonical card.
+    const firstPage = Math.floor((start - 1) / 12) * 12 + 1;
+    const key = `${origins[source]}:${firstPage}`;
+    const cached = directories.get(key);
+    let result = cached?.until > Date.now() ? cached.result : null;
+    if (!result) {
+      result = (async () => {
+        const first = await listing(source, category, 1);
+        let incomplete = false;
+        const pages = new Map();
+        for (let n = firstPage; n <= Math.min(firstPage + 11, first.total); n++) {
+          pages.set(n, (n === 1 ? Promise.resolve(first) : listing(source, category, n))
+            .then(data => {
+              if (data.current !== n) throw new Error("Unexpected page");
+              return data.items;
+            })
+            .catch(() => {
+              incomplete = true;
+              return [];
+            }));
+        }
+        const groups = await Promise.all(pages.values());
+        return { pages, all: groups.flat(), total: first.total, incomplete };
+      })();
+      if (directories.size >= 64) directories.delete(directories.keys().next().value);
+      directories.set(key, { result, until: Date.now() + 60_000 });
+      result.then(data => {
+        if (data.incomplete && directories.get(key)?.result === result) directories.delete(key);
+      }, () => {
+        if (directories.get(key)?.result === result) directories.delete(key);
+      });
+    }
+    const data = await result;
+    return { ...data, items: await data.pages.get(start) || [] };
   }
 
   async function catalogue({
@@ -320,19 +432,28 @@ export function createProviders(read = readHTML) {
     const sources = Object.hasOwn(origins, source)
       ? [source]
       : Object.keys(origins);
+    if (!sources.length) return { items: [], more: false, unavailable: true };
     const size = Math.min(12, Math.max(1, parseInt(limitPages) || 12));
     const start = term
       ? (Math.min(42, Math.max(1, parseInt(scan) || 1)) - 1) * 12 + 1
       : Math.min(500, Math.max(1, parseInt(page) || 1));
     let unavailable = false,
-      more = false,
-      maxPages = 1;
+      more = false;
+    if (!term && category === "series") {
+      const dirs = await Promise.all(sources.map(source =>
+        seriesDirectory(source, categories(term, source, category)[0], start)
+          .catch(() => ({ items: [], all: [], total: 1, incomplete: true }))));
+      const universe = [...new Map(dirs.flatMap(dir => dir.all).map(item => [item.url, item])).values()];
+      const current = new Set(dirs.flatMap(dir => dir.items).map(item => item.url));
+      const items = (await groupSeries(universe)).filter(item => current.has(item.url));
+      const pages = Math.max(1, ...dirs.map(dir => dir.total));
+      return { items, pages, more: start < pages, unavailable: dirs.some(dir => dir.incomplete) };
+    }
     const groups = await Promise.all(
       sources.flatMap((source) =>
         categories(term, source, category).map(async (category) => {
           try {
             const first = await listing(source, category, 1);
-            if (first.total) maxPages = Math.max(maxPages, first.total);
             const end = term ? start + size - 1 : start;
             more ||= first.total > end;
             const pending = [];
@@ -373,8 +494,11 @@ export function createProviders(read = readHTML) {
     const items = [...unique.values()].filter(
       (movie) => category !== "series" || mediaKind(movie) === "tv",
     );
-    if (!term) return { items, more, unavailable };
-    return { items: searchMovies(term, items), more, unavailable };
+    const matches = term
+      ? searchMovies(term, items)
+      : items;
+    // Group before the server slices search results into display pages.
+    return { items: await groupSeries(matches), more, unavailable };
   }
 
   async function preview(movie) {
@@ -436,19 +560,20 @@ export function createProviders(read = readHTML) {
         seen = new Set([root.href]);
       let unavailable = false;
       let rootQuality = "";
-      let batch = [{ url: root.href, context: "", version: "" }];
-      const deadline = Date.now() + 20000;
-      for (let depth = 0; batch.length && depth < 4; depth++) {
+      let batch = [{ url: root.href, context: "", version: "", depth: 0 }];
+      const deadline = Date.now() + 15_000;
+      while (batch.length && Date.now() < deadline) {
         const next = [];
         for (let offset = 0; offset < batch.length; offset += 10) {
           await Promise.all(
             batch.slice(offset, offset + 10).map(async (item) => {
               try {
-                if (Date.now() >= deadline) throw new Error("Source timed out");
-                const { html, url } = await read(item.url);
+                const remaining = deadline - Date.now();
+                if (remaining <= 0) throw new Error("Source timed out");
+                const { html, url } = await read(item.url, Math.min(4500, remaining));
                 const $ = load(html);
                 const version = item.version || pageQuality($);
-                if (depth === 0) rootQuality = version;
+                if (item.url === root.href) rootQuality = version;
                 $("a[href]")
                   .slice(0, 5000)
                   .each((_, el) => {
@@ -458,9 +583,9 @@ export function createProviders(read = readHTML) {
                     const label = a.text().replace(/\s+/g, " ").trim();
                     if (
                       href.pathname === new URL(url).pathname &&
-                      /^\?(?:get-)?page=\d+$/.test(href.search) &&
-                      !seen.has(href.href)
+                      /^\?(?:get-)?page=\d+$/.test(href.search)
                     ) {
+                      if (seen.has(href.href) || /page=1$/.test(href.search)) return;
                       if (seen.size >= 128) {
                         unavailable = true;
                         return;
@@ -502,7 +627,7 @@ export function createProviders(read = readHTML) {
                         season.test(label)) &&
                       !seen.has(href.href)
                     ) {
-                      if (seen.size >= 48 || depth === 3) {
+                      if (seen.size >= 128 || item.depth >= 6) {
                         unavailable = true;
                         return;
                       }
@@ -513,6 +638,7 @@ export function createProviders(read = readHTML) {
                       next.push({
                         url: href.href,
                         context,
+                        depth: item.depth + 1,
                         version:
                           nextVersion &&
                           !(version && /^original$/i.test(nextVersion))
@@ -528,14 +654,15 @@ export function createProviders(read = readHTML) {
           );
         }
         batch = next;
-        if (found.size >= 8 && depth >= 1) break;
       }
+      unavailable ||= batch.length > 0;
       const data = {
         quality: rootQuality,
         options: [...found.values()].sort((a, b) => b.resolution - a.resolution),
         unavailable,
       };
-      if (data.options.length) {
+      if (data.options.length && !data.unavailable) {
+        if (optionsCache.size >= 512) optionsCache.delete(optionsCache.keys().next().value);
         optionsCache.set(cacheKey, { data, expires: Date.now() + 120_000 });
       }
       return data;
@@ -620,4 +747,4 @@ export function createProviders(read = readHTML) {
   }
   return { catalogue, options, preview, resolveMedia };
 }
-export const { catalogue, options, preview, resolveMedia } = createProviders();
+export const { catalogue, options, preview, resolveMedia } = createProviders(readHTML, { listingTtl: 15_000 });

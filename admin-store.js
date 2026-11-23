@@ -36,10 +36,15 @@ export const digest = value => createHash('sha256').update(value).digest('hex');
 let cachedData = null;
 let cachedDataTime = 0;
 const DATA_CACHE_TTL = 30_000; // 30 seconds
+let cachedConfig, configPromise, configVersion = 0;
+export const configEpoch = () => configVersion;
 
 export function invalidateCache() {
   cachedData = null;
   cachedDataTime = 0;
+  cachedConfig = undefined;
+  configPromise = undefined;
+  configVersion++;
 }
 
 export async function loadData(client = database(), bypassCache = false) {
@@ -77,10 +82,20 @@ export async function saveData(data, {revoke = false, session} = {}) {
   });
   invalidateCache();
 }
-export async function loadConfig() {
+export async function loadConfig({ cachedOnly = false } = {}) {
   if (cachedData && (Date.now() - cachedDataTime < DATA_CACHE_TTL)) {
     return cachedData.config || {};
   }
-  const {rows} = await database().query('SELECT config FROM aftershow_express.settings');
-  return rows[0]?.config ?? {};
+  if (cachedOnly || cachedConfig?.until > Date.now()) return cachedConfig?.value ?? {};
+  if (configPromise) return configPromise;
+  const version = configVersion;
+  const pending = database().query('SELECT config FROM aftershow_express.settings')
+    .then(({ rows }) => {
+      const value = rows[0]?.config ?? {};
+      if (version === configVersion) cachedConfig = { value, until: Date.now() + DATA_CACHE_TTL };
+      return value;
+    })
+    .finally(() => { if (configPromise === pending) configPromise = undefined; });
+  configPromise = pending;
+  return pending;
 }

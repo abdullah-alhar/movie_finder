@@ -31,6 +31,62 @@ const services = {
   trailer: async () => "rPqTIibDpq4",
   artwork: async () => null,
 };
+test("missing pages render the branded 404 without changing API response types", async (t) => {
+  const server = createApp(services).listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((done) => server.close(done)));
+  const base = "http://127.0.0.1:" + server.address().port;
+  for (const path of ["/missing", "/movie/not-a-token", "/watch/not-a-token", "/404.html"]) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 404, path);
+    assert.equal(response.headers.get("x-robots-tag"), "noindex");
+    assert.match(response.headers.get("content-type"), /^text\/html/);
+    assert.match(await response.text(), /<h1 id="title">Page not found<\/h1>/);
+  }
+  for (const path of ["/api/missing", "/movie/not-a-token/info"]) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 404, path);
+    assert.match(response.headers.get("content-type"), /^application\/json/);
+    assert.match((await response.json()).error, /not found/i);
+  }
+});
+
+test("grouped series keeps seasons, episode numbers, and playable qualities separate", async (t) => {
+  const s2 = fixture.url.replace("dune-2021", "heart-beat-2025");
+  const s3 = s2.replace("2025", "2026");
+  const server = createApp({
+    ...services,
+    catalogue: async () => ({
+      items: [{
+        ...fixture, url: s3, title: "Heart Beat", year: 2026, kind: "tv",
+        seriesEntries: [[s3, 2026, [3]], [s2, 2025, [2]]],
+      }],
+    }),
+    options: async (movie) => ({
+      options: (movie.year === 2025 ? [720] : [720, 1080]).map(resolution => ({
+        page: new URL(`/download/heart-${movie.year}-${resolution}/`, movie.url).href,
+        episode: 1, resolution,
+      })),
+    }),
+    resolveMedia: async (url) => url.includes("heart-2025-720") ? "https://example.org/season-two.mp4" : null,
+  }).listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((done) => server.close(done)));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const json = async (path) => (await fetch(base + path)).json();
+  const { items: [series] } = await json("/api/catalogue?category=series");
+  const seasons = [{ number: 2, year: 2025 }, { number: 3, year: 2026 }];
+  assert.deepEqual(series.seasons, seasons);
+  assert.deepEqual((await json(series.url + "/info")).seasons, seasons);
+  const { options } = await json(series.url + "/options");
+  assert.deepEqual(options.map(({ season, episode, resolution }) => [season, episode, resolution]), [
+    [3, 1, 720], [3, 1, 1080], [2, 1, 720],
+  ]);
+  const playback = await fetch(base + options.at(-1).watch, { redirect: "manual" });
+  assert.equal(playback.status, 302);
+  assert.equal(playback.headers.get("location"), "https://example.org/season-two.mp4");
+});
+
 test("catalogue, bookmarks, playback and downloads use compatible signed links", async (t) => {
   const server = createApp(services).listen(0, "127.0.0.1");
   await once(server, "listening");

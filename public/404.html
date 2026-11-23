@@ -3,45 +3,48 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0d0d0f" />
+    <meta name="theme-color" content="#111827" />
     <meta name="robots" content="noindex" />
     <title>Page not found · AfterShow</title>
     <script>
       try {
-        var savedTheme = localStorage.getItem('aftershow-theme') || localStorage.getItem('afterframe-theme');
+        var savedTheme = localStorage.getItem('aftershow-theme') ?? localStorage.getItem('afterframe-theme');
         if (savedTheme === 'light' || savedTheme === 'dark') {
           document.documentElement.dataset.theme = savedTheme;
           var themeMeta = document.querySelector('meta[name="theme-color"]');
-          if (themeMeta && savedTheme === 'light') themeMeta.setAttribute('content', '#f4f2ed');
+          if (themeMeta && savedTheme === 'light') themeMeta.setAttribute('content', '#f5f7fa');
         }
       } catch (e) {}
     </script>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/brand.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,700;9..144,800&display=swap" rel="stylesheet" />
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0d0d0f;
-        --surface: #131316;
-        --surface2: #1c1c21;
-        --fg: #f0eee9;
-        --muted: #8b8a90;
+        --bg: var(--as-ink);
+        --surface: var(--as-slate);
+        --surface2: var(--as-raised);
+        --fg: var(--as-paper);
+        --muted: #a9b8cd;
         --border: rgba(255, 255, 255, 0.08);
-        --accent: #ff6b3d;
-        --accent2: #ff8c65;
+        --accent: var(--as-blue);
+        --accent2: var(--as-blue-hover);
+        --button-text: var(--as-ink);
       }
       [data-theme="light"] {
         color-scheme: light;
-        --bg: #f4f2ed;
-        --surface: #faf8f4;
-        --surface2: #edeae3;
-        --fg: #1a1814;
-        --muted: #6b6762;
+        --bg: var(--as-paper);
+        --surface: var(--as-paper-raised);
+        --surface2: var(--as-paper-muted);
+        --fg: var(--as-ink);
+        --muted: #4d5e75;
         --border: rgba(0, 0, 0, 0.09);
-        --accent: #c94c1e;
-        --accent2: #d96030;
+        --accent: var(--as-blue-ink);
+        --accent2: var(--as-blue-ink-hover);
+        --button-text: var(--as-paper);
       }
       *, *::before, *::after { box-sizing: border-box; }
       body {
@@ -53,9 +56,7 @@
         justify-content: center;
         gap: 22px;
         padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
-        background:
-          radial-gradient(1100px 560px at 50% -12%, rgba(255, 107, 61, 0.13), transparent 62%),
-          var(--bg);
+        background: var(--bg);
         color: var(--fg);
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         line-height: 1.5;
@@ -77,8 +78,7 @@
         padding: clamp(28px, 5vw, 46px);
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 20px;
-        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+        border-radius: 8px;
         text-align: center;
       }
       .code {
@@ -88,10 +88,7 @@
         font-size: clamp(76px, 18vw, 124px);
         line-height: 0.9;
         letter-spacing: -0.05em;
-        background: linear-gradient(135deg, var(--accent) 10%, #ff3366 90%);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        color: var(--accent);
       }
       h1 {
         margin: 0 0 10px;
@@ -116,8 +113,8 @@
         text-align: left;
       }
       .search:focus-within {
-        border-color: rgba(255, 107, 61, 0.5);
-        box-shadow: 0 0 0 3px rgba(255, 107, 61, 0.13);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(var(--as-blue-rgb), 0.18);
       }
       .search svg { flex: 0 0 auto; color: var(--muted); }
       .search input {
@@ -128,7 +125,7 @@
         background: transparent;
         color: var(--fg);
         font: inherit;
-        font-size: 15px;
+        font-size: 16px;
         outline: none;
       }
       .search input::placeholder { color: var(--muted); }
@@ -138,7 +135,7 @@
         border: 0;
         border-radius: 8px;
         background: var(--accent);
-        color: #fff;
+        color: var(--button-text);
         font: inherit;
         font-size: 13.5px;
         font-weight: 700;
@@ -166,7 +163,7 @@
         transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
       }
       .actions a:active { transform: scale(0.97); }
-      .primary { background: var(--accent); color: #fff; }
+      .primary { background: var(--accent); color: var(--button-text); }
       .primary:hover { background: var(--accent2); }
       .secondary {
         background: var(--surface2);
@@ -190,6 +187,10 @@
         .card { border-radius: 16px; }
         .actions a { flex: 1 1 100%; }
         .search button { padding: 10px 14px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .actions a, .search button { transition: none; }
+        .actions a:active { transform: none; }
       }
     </style>
   </head>
@@ -225,7 +226,7 @@
     <script>
       (function () {
         var path = location.pathname;
-        if (path.indexOf('/movie/') === 0 || path.indexOf('/watch/') === 0) {
+        if (/^\/(?:movie|watch|download)\//i.test(path)) {
           document.getElementById('title').textContent = 'This title link is unavailable';
           document.getElementById('message').textContent = 'The film link has expired or changed. Search the catalogue to find this title again.';
           document.title = 'Title not found · AfterShow';

@@ -1,111 +1,125 @@
 import { icon, esc, safeImage, json, section, choice, toast } from "./ui.js";
-function episodePicker(episodes, selected, choose, item = {}, selectedSeason = 1) {
+const episodeMetadata = new Map();
+function episodePicker(episodes, selected, choose, item, selectedSeason) {
   const container = document.createElement("div");
   container.className = "series-episodes-wrap";
-
   const head = document.createElement("div");
   head.className = "series-episodes-head";
   head.innerHTML = `
-    <div class="series-season-title">
-      <span class="season-badge">SEASON</span>
-      <span class="season-num">${selectedSeason >= 0 ? selectedSeason : 1}</span>
-      <span class="ep-count-badge">${episodes.length} Episodes</span>
-    </div>
+    <h3 class="series-season-title">Episodes <span class="ep-count-badge">${episodes.length} available</span></h3>
     <div class="series-nav-arrows">
-      <button type="button" class="ep-arrow ep-prev" aria-label="Previous episodes">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
-      </button>
-      <button type="button" class="ep-arrow ep-next" aria-label="Next episodes">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
-      </button>
-    </div>
-  `;
+      <button type="button" class="ep-arrow ep-prev" aria-label="Previous episode previews">${icon("left")}</button>
+      <button type="button" class="ep-arrow ep-next" aria-label="Next episode previews">${icon("right")}</button>
+    </div>`;
   container.append(head);
+  if (!episodes.length) {
+    head.querySelector(".series-nav-arrows").remove();
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No episodes could be loaded for this season.";
+    container.append(empty);
+    return container;
+  }
 
-  const grid = document.createElement("div");
-  grid.className = "episode-grid series-carousel";
+  const track = document.createElement("div");
+  track.className = "series-carousel";
+  track.dataset.season = String(selectedSeason);
+  track.setAttribute("role", "group");
+  track.setAttribute("aria-label", "Episode previews");
+  const art = safeImage(item.backdrop || item.image || item.poster);
 
-  const art = item.backdrop || item.image || item.poster || "";
-
-  for (const ep of episodes) {
-    const isSelected = ep === selected;
+  function makeCard(ep, playable = true) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "ep-card" + (isSelected ? " active" : "");
+    btn.className = "ep-card";
     btn.dataset.ep = String(ep);
-    btn.setAttribute("aria-label", "Episode " + (ep < 0 ? "Other" : ep));
-    btn.setAttribute("aria-pressed", String(isSelected));
-
-    const epNum = ep < 0 ? "Special" : `E${ep}`;
-    const epTitle = ep < 0 ? "Special Episode" : `${ep}. Episode ${ep}`;
-
+    if (playable) btn.setAttribute("aria-pressed", String(ep === selected));
+    btn.disabled = !playable;
+    const label = ep < 0 ? "Other episodes" : `Episode ${ep}`;
+    btn.setAttribute("aria-label", playable ? label : `${label}, unavailable`);
     btn.innerHTML = `
-      <div class="ep-card-thumb">
-        ${art ? `<img src="${esc(art)}" alt="" loading="lazy">` : `<div class="ep-thumb-fallback">${icon("tv")}</div>`}
-        <div class="ep-card-play">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="m8 5 11 7-11 7z"/></svg>
-        </div>
-        <span class="ep-badge-e">${esc(epNum)}</span>
-        <span class="ep-badge-hd">HD</span>
-      </div>
-      <div class="ep-card-meta">
-        <p class="ep-card-title">${esc(epTitle)}</p>
-        <p class="ep-card-info">
-          ${item.rating ? `<span class="ep-star">★</span> ${Number(item.rating).toFixed(1)} <span class="ep-dot">·</span> ` : ''}${item.year || "Series"}
-        </p>
-      </div>
-    `;
-
-    btn.onclick = () => {
-      choose(ep);
-    };
-
-    grid.append(btn);
+      <span class="ep-card-thumb">
+        ${art ? `<img src="${esc(art)}" alt="" loading="lazy">` : `<span class="ep-thumb-fallback">${icon("tv")}</span>`}
+        ${playable ? `<span class="ep-card-play" aria-hidden="true">${icon("play")}</span>` : ''}
+        <span class="ep-badge-e" aria-hidden="true">${ep < 0 ? "Other" : `E${ep}`}</span>
+      </span>
+      <span class="ep-card-meta">
+        <span class="ep-card-title">${label}</span>
+        <span class="ep-card-info"${playable ? ' hidden' : ''}>${playable ? '' : 'Not available'}</span>
+      </span>`;
+    if (playable) btn.onclick = () => choose(ep);
+    return btn;
   }
+  track.append(...episodes.map(ep => makeCard(ep)));
+  const positive = episodes.filter(ep => ep > 0);
+  const latest = positive[0];
+  const earliest = positive.at(-1);
+  const countLabel = head.querySelector('.ep-count-badge');
+  if (latest - earliest + 1 > positive.length)
+    countLabel.textContent = `Through E${latest} · ${episodes.length} playable`;
 
-  container.append(grid);
+  container.append(track);
+  const move = direction => {
+    track.scrollBy({
+      left: direction * Math.max(205, track.clientWidth * 0.85),
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
+  };
+  head.querySelector(".ep-prev").onclick = () => move(-1);
+  head.querySelector(".ep-next").onclick = () => move(1);
 
-  // Fetch real episode-level TMDB metadata (unique rating & screenshot per episode)
-  const sNum = selectedSeason >= 0 ? selectedSeason : 1;
+  if (selectedSeason < 0) return container;
   const basePath = location.pathname.replace(/\/(watch|downloads)\/?$/, "").replace(/\/$/, "");
-  json(basePath + '/season/' + sNum).then(data => {
+  const metadataUrl = basePath + '/season/' + selectedSeason;
+  if (!episodeMetadata.has(metadataUrl)) {
+    if (episodeMetadata.size >= 24) episodeMetadata.delete(episodeMetadata.keys().next().value);
+    episodeMetadata.set(metadataUrl, json(metadataUrl).catch(() => {
+      episodeMetadata.delete(metadataUrl);
+      return null;
+    }));
+  }
+  episodeMetadata.get(metadataUrl).then(data => {
     if (!data?.episodes?.length) return;
     const epMap = new Map(data.episodes.map(e => [e.episode, e]));
-    grid.querySelectorAll('.ep-card').forEach(cardEl => {
-      const epNum = Number(cardEl.dataset.ep);
-      const epInfo = epMap.get(epNum);
-      if (!epInfo) return;
-      if (epInfo.title) {
-        const titleEl = cardEl.querySelector('.ep-card-title');
-        if (titleEl) titleEl.textContent = `${epNum}. ${epInfo.title}`;
+    const playable = new Set(episodes);
+    const missing = [...epMap.keys()].filter(n =>
+      Number.isInteger(n) && n >= earliest && n <= latest && !playable.has(n)
+    ).sort((a, b) => b - a);
+    if (missing.length) {
+      const cards = [...track.children];
+      let position = 0;
+      for (const ep of missing) {
+        while (position < cards.length && Number(cards[position].dataset.ep) > ep) position++;
+        track.insertBefore(makeCard(ep, false), cards[position] || null);
       }
-      if (epInfo.rating) {
-        const infoEl = cardEl.querySelector('.ep-card-info');
-        if (infoEl) {
-          infoEl.innerHTML = `<span class="ep-star">★</span> ${epInfo.rating} <span class="ep-dot">·</span> E${epNum}`;
-        }
+      countLabel.textContent = `${episodes.length + missing.length} episodes · ${episodes.length} playable`;
+    }
+    track.querySelectorAll('.ep-card').forEach(card => {
+      const n = Number(card.dataset.ep);
+      const details = epMap.get(n);
+      if (!details) return;
+      if (details.title) {
+        card.querySelector('.ep-card-title').textContent = details.title;
+        card.setAttribute('aria-label', `Episode ${n}: ${details.title}${card.disabled ? ', unavailable' : ''}`);
       }
-      if (epInfo.image) {
-        const thumbHolder = cardEl.querySelector('.ep-card-thumb');
-        let img = thumbHolder.querySelector('img');
-        if (!img) {
-          img = document.createElement('img');
-          img.loading = 'lazy';
-          thumbHolder.prepend(img);
-          thumbHolder.querySelector('.ep-thumb-fallback')?.remove();
-        }
-        img.src = epInfo.image;
+      if (!card.disabled && Number.isFinite(details.rating) && details.rating > 0) {
+        const rating = card.querySelector('.ep-card-info');
+        rating.textContent = `★ ${details.rating}`;
+        rating.hidden = false;
       }
+      const image = safeImage(details.image);
+      if (!image) return;
+      const holder = card.querySelector('.ep-card-thumb');
+      let img = holder.querySelector('img');
+      if (!img) {
+        img = document.createElement('img');
+        img.loading = 'lazy';
+        img.alt = '';
+        holder.querySelector('.ep-thumb-fallback')?.replaceWith(img);
+      }
+      img.src = image;
     });
-  }).catch(() => { });
-
-  const prevBtn = head.querySelector(".ep-prev");
-  const nextBtn = head.querySelector(".ep-next");
-  if (prevBtn && nextBtn) {
-    prevBtn.onclick = () => grid.scrollBy({ left: -360, behavior: "smooth" });
-    nextBtn.onclick = () => grid.scrollBy({ left: 360, behavior: "smooth" });
-  }
-
+  });
   return container;
 }
 
@@ -135,7 +149,7 @@ export async function showDetail(main) {
     icon("play") +
     'Watch</a><a class="secondary" href="#downloads">Download</a><button class="secondary share">' +
     icon("share") +
-    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><p class="selection-title"></p><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><h2>Downloads</h2><p class="download-selection muted"></p><ul></ul><div class="download-recovery" role="status"></div></section></div>';
+    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><div class="selection-top"><div class="season-control"></div><p class="selection-title" role="status"></p></div><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><h2>Downloads</h2><p class="download-selection muted"></p><ul></ul><div class="download-recovery" role="status"></div></section></div>';
   const find = (sel) => main.querySelector(sel),
     video = find("video"),
     status = find(".player-state");
@@ -162,6 +176,8 @@ export async function showDetail(main) {
   cover(item.image);
   if (item.image) video.poster = item.image;
   if (item.kind === "tv") {
+    document.querySelector('.site-tab[aria-current="page"]')?.removeAttribute('aria-current');
+    document.querySelector('#series-nav')?.setAttribute('aria-current', 'page');
     find(".back").href = "/series";
     find(".back span").textContent = "Browse series";
     find(".eyebrow").textContent = "SERIES DETAILS";
@@ -246,7 +262,9 @@ export async function showDetail(main) {
       }
     })
     .catch(() => { });
-  let selectedSeason, selectedEpisode, selectedOption, selectedPart;
+  const seasonYears = new Map(item.seasons?.map(({ number, year }) => [number, year]));
+  let selectedSeason = item.seasons?.at(-1)?.number;
+  let selectedEpisode, selectedOption, selectedPart;
   let sequence = [];
   const picker = find(".selection-picker");
   const shell = find(".player-shell");
@@ -318,7 +336,11 @@ export async function showDetail(main) {
     showEpisode("Selected");
   }
   const currentMedia = () => !!selectedOption && video.getAttribute("src") === selectedOption.watch;
-  video.addEventListener("play", () => { if (currentMedia()) showEpisode("Loading"); });
+  video.addEventListener("play", () => {
+    if (currentMedia()) showEpisode("Loading");
+    find(".player-quality-prompt")?.classList.add("hidden");
+    find(".video-big-play")?.classList.add("hidden");
+  });
   video.addEventListener("waiting", () => { if (currentMedia() && !video.paused) showEpisode("Buffering"); });
   video.addEventListener("pause", () => {
     if (currentMedia() && video.currentTime > 0 && !video.ended && !video.error) showEpisode("Paused");
@@ -347,39 +369,48 @@ export async function showDetail(main) {
     video.load();
   }
   function render() {
+    const previousList = find(".series-carousel");
+    const previousSeason = previousList?.dataset.season;
+    const scrollLeft = previousList?.scrollLeft || 0;
     const actions = find(".media-actions"),
       list = find(".downloads ul");
     actions.replaceChildren();
     list.replaceChildren();
     const selection = find(".selection-controls");
+    const seasonControl = find(".season-control");
     selection.replaceChildren();
-    const series = all.some((o) => o.season != null || o.episode != null);
+    seasonControl.replaceChildren();
+    const series = seasonYears.size > 0 || all.some((o) => o.season != null || o.episode != null);
     let matches = all;
     if (series) {
       const distinct = (values) => [...new Set(values)].sort((a, b) => a - b);
-      const seasons = distinct(all.map((o) => o.season ?? -1));
+      const seasons = distinct([...seasonYears.keys(), ...all.map((o) => o.season ?? -1)]);
       if (!seasons.includes(selectedSeason)) selectedSeason = seasons[0];
-      selection.append(
-        choice(
-          "Season",
-          seasons,
-          selectedSeason,
-          (v) => {
-            selectMedia(v, undefined, undefined);
-          },
-          (v) => (v < 0 ? "Other" : String(v)),
-        ),
-      );
+      const formatSeason = v => v < 0 ? "Other episodes" : seasonYears.has(v)
+        ? `Season ${v} (${seasonYears.get(v)})` : `Season ${v}`;
+      if (seasons.length > 1) {
+        const select = document.createElement("select");
+        select.className = "season-select";
+        select.setAttribute("aria-label", "Choose season");
+        select.replaceChildren(...seasons.map(v => new Option(formatSeason(v), v, false, v === selectedSeason)));
+        select.onchange = () => {
+          selectMedia(Number(select.value), undefined, undefined, false);
+          find(".season-select")?.focus({ preventScroll: true });
+        };
+        seasonControl.append(select);
+      } else {
+        seasonControl.textContent = formatSeason(selectedSeason);
+      }
       matches = all.filter((o) => (o.season ?? -1) === selectedSeason);
-      const episodes = distinct(matches.map((o) => o.episode ?? -1));
+      const episodes = distinct(matches.map((o) => o.episode ?? -1)).reverse();
       if (!episodes.includes(selectedEpisode)) selectedEpisode = episodes[0];
-      selection.append(
-        episodePicker(episodes, selectedEpisode, (episode) => {
-          if (episode === selectedEpisode) return;
-          selectMedia(selectedSeason, episode, undefined);
-          picker.querySelector('.episode-grid [aria-pressed="true"]')?.focus({ preventScroll: true });
-        }, item, selectedSeason),
-      );
+      selection.append(episodePicker(episodes, selectedEpisode, (episode) => {
+        if (episode === selectedEpisode) return;
+        selectMedia(selectedSeason, episode, undefined);
+        picker.querySelector('.series-carousel [aria-pressed="true"]')?.focus({ preventScroll: true });
+      }, item, selectedSeason));
+      const episodeList = find(".series-carousel");
+      if (episodeList && previousSeason === episodeList.dataset.season) episodeList.scrollLeft = scrollLeft;
       matches = matches.filter((o) => (o.episode ?? -1) === selectedEpisode);
     }
     const parts = [...new Set(all.map(partNumber).filter(n => n != null))].sort((a, b) => a - b);
@@ -446,6 +477,7 @@ export async function showDetail(main) {
           index: i,
           name: name,
           size: m.size || "",
+          edition: m.edition || "",
           active: i === activeIdx,
           select: () => doSwitch(i),
         };
@@ -461,7 +493,11 @@ export async function showDetail(main) {
       selectedEpisode >= 0 ? "Episode " + selectedEpisode : "Other episodes",
     ].filter(Boolean).join(" · ") : selectedPart != null ? "Part " + selectedPart : "Other versions";
     find(".download-selection").textContent = series || multipart ? selectedLabel : "";
-    picker.querySelector(".selection-title").textContent = selectedLabel;
+    picker.querySelector(".selection-title").textContent = series
+      ? selectedEpisode >= 0 ? `Episode ${selectedEpisode} selected` : ""
+      : selectedLabel;
+    const watchLink = find('.actions .primary[href="#watch"]');
+    watchLink.onclick = null;
     if (matches.length) {
       // In-Player Quality Popup Overlay inside video-wrap (Asks quality before playback starts)
       let promptOverlay = find(".player-quality-prompt");
@@ -535,13 +571,11 @@ export async function showDetail(main) {
         promptOverlay.classList.add("hidden");
       }
 
-      video.addEventListener("play", () => {
-        promptOverlay?.classList.add("hidden");
-        bigPlay?.classList.add("hidden");
-      });
-
       function showQualityPicker() {
-        find("#watch")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        find("#watch")?.scrollIntoView({
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+          block: "start",
+        });
         if (matches.length > 1 && promptOverlay) {
           promptOverlay.classList.remove("hidden");
         } else {
@@ -551,13 +585,10 @@ export async function showDetail(main) {
       }
 
       bigPlay.onclick = () => showQualityPicker();
-      const watchLink = find('.actions .primary[href="#watch"]');
-      if (watchLink) {
-        watchLink.onclick = (e) => {
-          e.preventDefault();
-          showQualityPicker();
-        };
-      }
+      watchLink.onclick = (e) => {
+        e.preventDefault();
+        showQualityPicker();
+      };
       for (const o of matches) {
         if (!/^\/download\/[\w.-]+$/.test(o.download || "")) continue;
         const li = document.createElement("li"),
@@ -571,9 +602,12 @@ export async function showDetail(main) {
         li.append(name, link);
         list.append(li);
       }
+    } else {
+      find(".video-big-play")?.classList.add("hidden");
+      find(".player-quality-prompt")?.classList.add("hidden");
     }
     status.textContent = partial
-      ? "Some versions could not be checked."
+      ? (series ? "Some episodes or qualities couldn’t be loaded. Try checking again." : "Some versions could not be checked.")
       : matches.length
         ? ""
         : "No playable versions are currently listed.";
@@ -607,7 +641,10 @@ export async function showDetail(main) {
     try {
       const result = await json(base + "/options", controller.signal);
       clearTimeout(timer);
-      all = result.options || [];
+      const options = result.options || [];
+      all = result.unavailable
+        ? [...new Map([...all, ...options].map(option => [option.watch, option])).values()]
+        : options;
       const editions = [
         ...new Set(all.map((option) => option.edition).filter(Boolean)),
       ];
@@ -617,7 +654,6 @@ export async function showDetail(main) {
       partial = Boolean(result.unavailable);
     } catch {
       clearTimeout(timer);
-      all = [];
       partial = true;
     }
     render();

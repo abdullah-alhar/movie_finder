@@ -127,6 +127,18 @@ function doWrap(video, videoWrap) {
 
 /* ─── In-Player Quality Switcher — Native Video.js 10 Menu Integration ──── */
 function setupInPlayerQuality(video, skin) {
+  const EMPTY_QUALITIES = [];
+  const observedGears = new WeakSet();
+  const captureAction = (element, activate) => {
+    const handle = event => {
+      if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      activate();
+    };
+    element.addEventListener('click', handle, true);
+    element.addEventListener('keydown', handle, true);
+  };
 
   // Seamless resume when src changes due to quality switch
   video.addEventListener('loadstart', () => {
@@ -154,257 +166,126 @@ function setupInPlayerQuality(video, skin) {
     const sr = skin.shadowRoot;
     if (!sr) return;
 
-    const quals = window.__movieQualities || [];
+    const quals = window.__movieQualities || EMPTY_QUALITIES;
     const activeQ = quals.find(q => q.active) || quals[0];
 
-    // Ensure CSS styles for custom quality items inside the shadow root
+    // Swap the visible menu rows without closing or replacing the popover.
     if (!sr.querySelector('#af-gear-quality-style')) {
       const style = document.createElement('style');
       style.id = 'af-gear-quality-style';
       style.textContent = `
-        /* Hide Video.js 10's built-in disabled quality item and group */
-        media-menu-item:has(media-text[token="menu.quality"]),
-        media-menu-content:has(media-quality-radio-group),
-        media-quality-radio-group {
+        media-menu-item:has(> media-text[token="menu.quality"]),
+        media-menu-content:has(> media-quality-radio-group),
+        media-menu-content.af-quality-open > :not(.af-quality-view),
+        .af-quality-view[hidden] {
           display: none !important;
-        }
-
-        .af-quality-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 8px 12px;
-          cursor: pointer;
-          border-radius: var(--media-menu-item-radius, 6px);
-          color: rgba(255, 255, 255, 0.88);
-          font-size: 14px;
-          font-family: inherit;
-          transition: background 0.12s;
-          user-select: none;
-        }
-        .af-quality-row:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #fff;
-        }
-        .af-qr-left {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .af-qr-right {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          color: rgba(255, 255, 255, 0.5);
-          font-size: 13px;
-        }
-        media-menu:has(.af-quality-panel.open),
-        .media-menu-popup:has(.af-quality-panel.open) {
-          height: auto !important;
-          min-height: 190px !important;
-          max-height: 320px !important;
-        }
-        .af-quality-panel {
-          position: absolute;
-          inset: 0;
-          height: 100%;
-          min-height: 190px;
-          background: #16161c !important;
-          border-radius: inherit;
-          z-index: 99;
-          display: none;
-          flex-direction: column;
-          padding: 8px 6px;
-          box-sizing: border-box;
-          min-width: 170px;
-        }
-        .af-quality-panel.open {
-          display: flex;
-        }
-        .af-qp-back {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 10px;
-          background: none;
-          border: none;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          color: #fff;
-          font-size: 14px;
-          font-weight: 600;
-          font-family: inherit;
-          cursor: pointer;
-          width: 100%;
-          text-align: left;
-          border-radius: 4px;
-        }
-        .af-qp-back:hover {
-          background: rgba(255, 255, 255, 0.08);
-        }
-        .af-qp-list {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          padding: 6px 0;
-          max-height: 220px;
-          overflow-y: auto;
-        }
-        .af-qp-opt {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 8px 12px;
-          background: none;
-          border: none;
-          color: rgba(255, 255, 255, 0.85);
-          font-size: 14px;
-          font-family: inherit;
-          cursor: pointer;
-          border-radius: 6px;
-          width: 100%;
-          text-align: left;
-          transition: background 0.12s;
-        }
-        .af-qp-opt:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #fff;
-        }
-        .af-qp-opt.active {
-          color: #fff;
-          font-weight: 600;
-        }
-        .af-qp-check {
-          color: var(--media-primary-color, #ff6b3d);
-          font-size: 15px;
-          font-weight: 700;
         }
       `;
       sr.appendChild(style);
     }
 
-    // Hide any built-in disabled quality trigger Video.js 10 added
-    sr.querySelectorAll('media-menu-item').forEach(item => {
-      if (item.querySelector('media-text[token="menu.quality"]')) {
-        item.style.setProperty('display', 'none', 'important');
-      }
-    });
+    const nativeTrigger = sr.querySelector('media-menu-item[commandfor]:has(> media-text[token="menu.quality"])');
+    const nativePanel = sr.getElementById(nativeTrigger?.getAttribute('commandfor') || '');
+    const nativeBack = nativePanel?.querySelector('.media-menu-back-item');
+    const nativeOption = nativePanel?.querySelector('media-quality-radio-group template')
+      ?.content.querySelector('media-menu-radio-item');
+    const menu = nativeTrigger?.closest('media-menu');
+    if (!menu || !nativeBack || !nativeOption) return;
+    const root = nativeTrigger.closest('media-menu-content');
+    const gear = sr.querySelector('.video-controls-settings-button');
+    let trigger = root.querySelector('.af-quality-trigger');
+    let view = root.querySelector('.af-quality-view');
+    if (!trigger || !view) {
+      trigger = document.createElement('media-menu-item');
+      trigger.className = 'media-menu-trigger-item af-quality-trigger';
+      trigger.append(...[...nativeTrigger.childNodes].map(node => node.cloneNode(true)));
+      trigger.querySelector('media-text').replaceWith(document.createTextNode('Quality'));
+      view = document.createElement('div');
+      view.className = 'af-quality-view';
+      view.hidden = true;
+      view.id = root.id + '-file-quality';
+      trigger.setAttribute('aria-controls', view.id);
+      trigger.setAttribute('aria-expanded', 'false');
 
-    // Find the Speed item to locate the main menu content container
-    const speedText = sr.querySelector('media-text[token="menu.speed"]');
-    const speedItem = speedText?.closest('media-menu-item') || sr.querySelector('media-menu-item[commandfor]');
-    if (!speedItem) return;
+      const back = nativeBack.cloneNode(true);
+      back.querySelector('media-text').replaceWith(document.createTextNode('Quality'));
+      back.setAttribute('aria-label', 'Back to settings');
+      const divider = document.createElement('media-menu-separator');
+      divider.className = 'media-menu-separator';
+      const list = document.createElement('div');
+      list.className = 'media-menu-radio-group af-quality-options';
+      list.setAttribute('role', 'group');
+      list.setAttribute('aria-label', 'Available qualities');
+      view.append(back, divider, list);
+      root.append(view);
+      nativeTrigger.after(trigger);
 
-    const menuPopup = speedItem.closest('media-menu') || speedItem.parentNode;
-    const topContent = speedItem.closest('media-menu-content') || speedItem.parentNode;
-
-    // Build or get our custom Quality Row inside topContent
-    let qualityRow = topContent.querySelector('.af-quality-row');
-    if (!qualityRow) {
-      qualityRow = document.createElement('div');
-      qualityRow.className = 'af-quality-row';
-      qualityRow.setAttribute('role', 'button');
-      qualityRow.setAttribute('tabindex', '0');
-      qualityRow.innerHTML = `
-        <div class="af-qr-left">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span>Quality</span>
-        </div>
-        <div class="af-qr-right">
-          <span class="af-qr-val"></span>
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>
-        </div>
-      `;
-      topContent.insertBefore(qualityRow, speedItem);
-    }
-
-    // Build or get our custom Quality Panel inside menuPopup
-    let panel = menuPopup.querySelector('.af-quality-panel');
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.className = 'af-quality-panel';
-      panel.innerHTML = `
-        <button type="button" class="af-qp-back">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>
-          Quality
-        </button>
-        <div class="af-qp-list"></div>
-      `;
-      menuPopup.appendChild(panel);
-    }
-
-    const closePanel = () => {
-      panel.classList.remove('open');
-      topContent.style.visibility = '';
-      menuPopup.style.removeProperty('min-height');
-      menuPopup.style.removeProperty('height');
-    };
-
-    const openPanel = () => {
-      panel.classList.add('open');
-      topContent.style.visibility = 'hidden';
-      const calcHeight = Math.max(190, 55 + quals.length * 40);
-      menuPopup.style.setProperty('min-height', `${calcHeight}px`, 'important');
-      menuPopup.style.setProperty('height', `${calcHeight}px`, 'important');
-    };
-
-    panel.querySelector('.af-qp-back').onclick = (e) => {
-      e.stopPropagation();
-      closePanel();
-    };
-
-    // When the menu popup closes, make sure the panel resets
-    if (!menuPopup._afResetBound) {
-      menuPopup._afResetBound = true;
-      const obs = new MutationObserver(() => {
-        if (menuPopup.hasAttribute('hidden') || menuPopup.style.display === 'none') {
-          closePanel();
-        }
+      const resetView = (restoreFocus = false) => {
+        if (view.hidden) return;
+        root.classList.remove('af-quality-open');
+        trigger.setAttribute('aria-expanded', 'false');
+        if (restoreFocus && !trigger.hidden) trigger.focus({ preventScroll: true });
+        view.hidden = true;
+      };
+      captureAction(trigger, () => {
+        view.hidden = false;
+        back.focus({ preventScroll: true });
+        trigger.setAttribute('aria-expanded', 'true');
+        root.classList.add('af-quality-open');
       });
-      obs.observe(menuPopup, { attributes: true, attributeFilter: ['hidden', 'style'] });
+      captureAction(back, () => resetView(true));
+      view.addEventListener('keydown', e => {
+        if (e.key !== 'Escape' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        e.stopPropagation();
+        resetView(true);
+      }, true);
+      if (gear && !observedGears.has(gear)) {
+        observedGears.add(gear);
+        gear.addEventListener('click', () => setTimeout(renderQualityMenu, 0));
+        new MutationObserver(() => {
+          if (gear.getAttribute('aria-expanded') === 'false') resetView();
+        }).observe(gear, { attributes: true, attributeFilter: ['aria-expanded'] });
+      }
     }
 
-    // Show/hide based on whether multiple qualities exist
-    if (quals.length <= 1) {
-      qualityRow.style.display = 'none';
-      closePanel();
+    const hidden = quals.length <= 1;
+    if (trigger.hidden !== hidden) trigger.hidden = hidden;
+    const hint = trigger.querySelector('[data-part="value"]');
+    const name = activeQ?.name || '';
+    if (hint.textContent !== name) hint.textContent = name;
+    const list = view.querySelector('.af-quality-options');
+    if (list.qualities === quals) {
+      Array.from(list.children).forEach((item, index) => {
+        const checked = String(quals[index] === activeQ);
+        if (item.getAttribute('aria-checked') !== checked) item.setAttribute('aria-checked', checked);
+      });
       return;
     }
-
-    qualityRow.style.display = 'flex';
-    const valEl = qualityRow.querySelector('.af-qr-val');
-    if (valEl) valEl.textContent = activeQ ? activeQ.name : '';
-
-    // Click on Quality row opens panel
-    qualityRow.onclick = (e) => {
-      e.stopPropagation();
-      openPanel();
-    };
-
-    // Populate panel options
-    const listEl = panel.querySelector('.af-qp-list');
-    listEl.innerHTML = '';
-    quals.forEach(q => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'af-qp-opt' + (q.active ? ' active' : '');
-      btn.innerHTML = `
-        <span>${esc(q.name)}</span>
-        <span class="af-qp-check" style="${q.active ? '' : 'visibility:hidden'}">✓</span>
-      `;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        if (!q.active) {
-          const curTime = video.currentTime;
-          const wasPlay = !video.paused;
-          video.dataset.pendingResume = String(curTime);
-          video.dataset.pendingPlay   = String(wasPlay);
-          q.select();
-        }
-        if (valEl) valEl.textContent = q.name;
-        closePanel();
-      };
-      listEl.appendChild(btn);
-    });
+    list.qualities = quals;
+    list.replaceChildren(...quals.map(q => {
+      const item = document.createElement('media-menu-item');
+      item.className = 'media-menu-radio-item';
+      item.append(...[...nativeOption.childNodes].map(node => node.cloneNode(true)));
+      item.setAttribute('aria-checked', String(q === activeQ));
+      item.querySelector('[data-part="label"]').textContent = q.name;
+      item.querySelector('[data-part="tier"]')?.remove();
+      const badge = item.querySelector('[data-part="badge"]');
+      const same = quals.filter(candidate => candidate.name === q.name);
+      const detail = [q.edition, q.size].filter(Boolean).join(' · ');
+      if (badge) {
+        badge.hidden = same.length < 2;
+        badge.textContent = detail || `Source ${same.indexOf(q) + 1}`;
+      }
+      captureAction(item, () => {
+        if (item.getAttribute('aria-checked') === 'true') return;
+        video.dataset.pendingResume = String(video.currentTime);
+        video.dataset.pendingPlay = String(!video.paused);
+        q.select();
+      });
+      return item;
+    }));
+    for (const item of list.children) item.setAttribute('role', 'menuitemradio');
   }
 
   // Initial and reactive updates

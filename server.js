@@ -7,7 +7,7 @@ import { lookup, discovery, rating, trailer, artwork, seasonDetails } from "./me
 import { movieFrom, sign, unpack } from "./links.js";
 import { approved, updateOrigins, origins, posterUrl, mediaKind } from "./sources.js";
 import adminRouter from "./admin.js";
-import { loadConfig } from './admin-store.js';
+import { configEpoch, loadConfig } from './admin-store.js';
 const publicDir = fileURLToPath(new URL("public/", import.meta.url));
 const notFoundPage = fileURLToPath(new URL("public/404.html", import.meta.url));
 const trusted = new Set(
@@ -27,16 +27,25 @@ const number = (value, max) =>
   Math.min(max, Math.max(1, parseInt(value, 10) || 1));
 function card(movie) {
   const { title, year, provider } = movie;
+  const kind = mediaKind(movie);
+  const payload = [movie.url, title, year, kind];
+  const entries = movie.seriesEntries?.map(entry =>
+    Array.isArray(entry) ? entry : [entry.url, entry.year, entry.seasons]);
+  const grouped = entries?.length > 1 ? sign("movie-details", [...payload, entries]) : null;
   return {
     title,
     year,
     provider,
     quality: movie.quality || null,
-    kind: mediaKind(movie),
+    kind,
+    ...(grouped && grouped.length <= 4096 && {
+      seasons: entries.flatMap(([, releaseYear, numbers]) => numbers.map(number => ({ number, year: releaseYear })))
+        .sort((a, b) => a.number - b.number),
+    }),
     poster: posterUrl(movie),
     url: provider === "Custom" ? movie.url :
       "/movie/" +
-      sign("movie-details", [movie.url, title, year, mediaKind(movie)]),
+      (grouped && grouped.length <= 4096 ? grouped : sign("movie-details", payload)),
   };
 }
 export function createApp(
@@ -57,20 +66,23 @@ export function createApp(
   app.disable("x-powered-by");
   const visits = new Map();
   let activeLookups = 0;
-  let originsLoaded = false;
-
-  // On serverless (Vercel), ensure DB config is loaded on first request
-  app.use(async (req, res, next) => {
-    if (!originsLoaded && process.env.EXPRESS_DATABASE_URL) {
-      try {
-        updateOrigins(await loadConfig());
-        originsLoaded = true;
-      } catch (err) {
+  let configAttempt, configFreshUntil = 0, lastConfigEpoch = -1;
+  function ensureOrigins() {
+    const epoch = configEpoch();
+    if (!process.env.EXPRESS_DATABASE_URL ||
+        (epoch === lastConfigEpoch && Date.now() < configFreshUntil)) return;
+    if (!configAttempt) {
+      lastConfigEpoch = epoch;
+      configAttempt = loadConfig().then(config => {
+        updateOrigins(config);
+        configFreshUntil = Date.now() + 30_000;
+      }).catch(err => {
+        configFreshUntil = Date.now() + 5_000;
         console.warn("[origins] Delayed init error:", err.message);
-      }
+      }).finally(() => { configAttempt = undefined; });
     }
-    next();
-  });
+    return configAttempt;
+  }
 
   app.use((req, res, next) => {
     res.set({
@@ -91,14 +103,23 @@ export function createApp(
     next();
   });
   app.get("/health", (req, res) => res.json({ status: "ok" }));
-  app.use(
-    express.static(publicDir, { index: false, dotfiles: "deny", maxAge: "5m" }),
-  );
   const sendNotFound = (req, res) => {
     res.status(404).set("X-Robots-Tag", "noindex");
-    if (req.path.startsWith("/api/")) return res.json({ error: "Not found" });
+    if (/^\/(?:admin\/)?api(?:\/|$)/i.test(req.path)) {
+      return res.json({ error: "Not found" });
+    }
     return res.type("html").sendFile(notFoundPage);
   };
+  app.get("/404.html", sendNotFound);
+  app.use(
+    express.static(publicDir, {
+      index: false,
+      dotfiles: "deny",
+      setHeaders: (res, path) => {
+        if (!path.endsWith(".html")) res.setHeader("Cache-Control", "public, max-age=60");
+      },
+    }),
+  );
   app.use((req, res, next) => {
     const now = Date.now(),
       key = req.socket.remoteAddress;
@@ -138,6 +159,13 @@ export function createApp(
     }
     next();
   });
+  // Assets, health checks and plain browse shells don't need a database
+  // round trip when a Vercel instance starts.
+  app.use(async (req, res, next) => {
+    if (/^\/(?:api\/(?:catalogue|suggestions)(?:\/|$)|(?:movie|trailer|watch|download)\/|admin\/dashboard(?:\/|$))/i.test(req.path))
+      await ensureOrigins();
+    next();
+  });
   // Admin routes (before static/shell so /admin/* isn't caught by static)
   app.use("/admin", adminRouter);
 
@@ -147,10 +175,13 @@ export function createApp(
   app.param("token", (req, res, next, token) => {
     try {
       req.movie = movieFrom(token);
-      next();
     } catch {
+      if (!/^\/movie\/[^/]+(?:\/(?:watch|downloads))?\/?$/i.test(req.path)) {
+        return res.status(404).set("X-Robots-Tag", "noindex").json({ error: "Title not found" });
+      }
       return sendNotFound(req, res);
     }
+    next();
   });
   app.get(
     ["/movie/:token", "/movie/:token/watch", "/movie/:token/downloads"],
@@ -181,7 +212,9 @@ export function createApp(
     
     // Include approved curated links from PostgreSQL.
     if (!params.source && !params.category) {
-      const customLinks = process.env.EXPRESS_DATABASE_URL ? (await loadConfig()).customLinks ?? [] : [];
+      const customLinks = process.env.EXPRESS_DATABASE_URL
+        ? await loadConfig({ cachedOnly: true }).then(config => config.customLinks ?? [])
+        : [];
       const filteredCustom = customLinks.filter(l => approved(l.url) && (!q || l.label.toLowerCase().includes(q.toLowerCase())));
       const customItems = filteredCustom.map(l => ({
         title: l.label,
@@ -250,16 +283,40 @@ export function createApp(
     res.json(result);
   });
   app.get("/movie/:token/options", async (req, res) => {
-    let result;
-    try {
-      result = await services.options(req.movie);
-    } catch {
-      result = { options: [], unavailable: true };
+    const movie = req.movie;
+    const grouped = movie.seriesEntries.length > 1;
+    const entries = grouped ? movie.seriesEntries : [movie];
+    const results = await Promise.all(entries.map(async (entry) => {
+      const member = { ...movie, ...entry };
+      const token = grouped
+        ? sign("movie-details", [member.url, member.title, member.year, member.kind])
+        : req.params.token;
+      try {
+        const result = await services.options(member);
+        return {
+          ...result,
+          options: result.options.map(option => ({
+            ...option,
+            season: option.season ?? (entry.seasons?.length === 1 ? entry.seasons[0] : null),
+            token,
+          })),
+        };
+      } catch {
+        return { options: [], unavailable: true };
+      }
+    }));
+    const unique = new Map();
+    for (const result of results) {
+      for (const option of result.options) {
+        const key = JSON.stringify([option.season, option.episode, option.resolution, option.page]);
+        if (!unique.has(key)) unique.set(key, option);
+      }
     }
     res.json({
-      ...result,
-      options: result.options.map(({ page, ...option }) => {
-        const id = sign("movie-download", [page, req.params.token]);
+      quality: results.find(result => result.quality)?.quality,
+      unavailable: results.some(result => result.unavailable),
+      options: [...unique.values()].map(({ page, token, ...option }) => {
+        const id = sign("movie-download", [page, token]);
         return {
           ...option,
           watch: "/watch/" + id,
@@ -289,7 +346,7 @@ export function createApp(
         }
       }
     } catch {
-      return res.sendStatus(404);
+      return sendNotFound(req, res);
     }
     const target = await services.resolveMedia(
       page,
@@ -326,18 +383,9 @@ if (
   const host =
     process.env.HOST ||
     (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
-  if (process.env.EXPRESS_DATABASE_URL) {
-    // Load provider URLs from DB at startup. Origins stay empty until this succeeds.
-    // If the DB is briefly unreachable, warn and continue — scraper will return
-    // unavailable until the next admin dashboard load refreshes the origins.
-    try {
-      updateOrigins(await loadConfig());
-    } catch (err) {
-      console.warn(`[startup] Could not load config from DB: ${err.message}. Provider origins will be empty until DB is reachable.`);
-    }
-  } else if (process.env.NODE_ENV === "production") {
+  if (!process.env.EXPRESS_DATABASE_URL && process.env.NODE_ENV === "production") {
     throw new Error("EXPRESS_DATABASE_URL is required in production");
-  } else {
+  } else if (!process.env.EXPRESS_DATABASE_URL) {
     console.warn("[startup] EXPRESS_DATABASE_URL not set — admin dashboard requires it.");
   }
   app.listen(port, host, () =>

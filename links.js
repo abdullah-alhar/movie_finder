@@ -55,9 +55,10 @@ export function unpack(kind, token) {
   );
 }
 export function movieFrom(token) {
-  let data;
+  let data, verified = false;
   try {
     data = unpack("movie-details", token);
+    verified = true;
   } catch (err) {
     // If HMAC verification failed (e.g. secret rotated or previous session before restart),
     // safely recover payload if and only if it strictly matches an approved provider origin
@@ -92,6 +93,21 @@ export function movieFrom(token) {
 
   const currentOrigin = origins[source] || parsed.origin;
   const currentUrl = new URL(parsed.pathname + parsed.search, currentOrigin).href;
+  const seriesEntries = [];
+  if (verified && kind === "tv" && Array.isArray(data[4])) {
+    for (const entry of data[4].slice(0, 8)) {
+      if (!Array.isArray(entry)) continue;
+      const [address, releaseYear, seasons] = entry;
+      if (typeof address !== "string" || !Number.isInteger(releaseYear) || !Array.isArray(seasons)) continue;
+      const member = URL.parse(address);
+      if (member?.origin !== parsed.origin || member.username || member.password) continue;
+      seriesEntries.push({
+        url: new URL(member.pathname + member.search, currentOrigin).href,
+        year: releaseYear,
+        seasons: seasons.filter(n => Number.isInteger(n) && n > 0 && n <= 999),
+      });
+    }
+  }
 
   return {
     url: currentUrl,
@@ -100,5 +116,6 @@ export function movieFrom(token) {
     source,
     kind: kind === "tv" ? "tv" : undefined,
     provider: source === "isaidub" ? "Isaidub" : "Moviezda",
+    seriesEntries,
   };
 }

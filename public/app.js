@@ -20,6 +20,7 @@ if (navEl) navEl.setAttribute('aria-current', 'page');
 // ─── Theme ───────────────────────────────────────────────────────────────────
 function applyTheme(value) {
   document.documentElement.dataset.theme = value;
+  $('meta[name="theme-color"]').content = value === 'light' ? '#f5f7fa' : '#111827';
   const btn = $('#theme');
   if (!btn) return;
   const isLight = value === 'light';
@@ -60,7 +61,6 @@ function closeSearch() {
   clearTimeout(searchTimer);
   searchAbort?.abort();
   suggestions.hidden = true;
-  query.setAttribute('aria-expanded', 'false');
 }
 
 query.addEventListener('input', () => {
@@ -89,7 +89,6 @@ query.addEventListener('input', () => {
       all.textContent = isSeries ? 'Search all series' : 'Search all listings →';
       suggestions.append(all);
       suggestions.hidden = false;
-      query.setAttribute('aria-expanded', 'true');
     } catch {}
   }, 320);
 });
@@ -142,8 +141,8 @@ function buildHeroSlideshow(items) {
       </div>
       <div class="hero-content">
         <div class="hero-badges">
-          <span class="hero-badge-tag">🔥 FEATURED</span>
-          <span class="hero-badge-kind">${isTv ? 'SERIES' : 'MOVIE'}</span>
+          <span class="hero-badge-tag">Featured</span>
+          <span class="hero-badge-kind">${isTv ? 'Series' : 'Film'}</span>
           ${item.quality ? `<span class="hero-badge-quality">${esc(item.quality)}</span>` : ''}
         </div>
         <h1 class="hero-title">${esc(item.title)}</h1>

@@ -1,0 +1,18 @@
+:root {
+  --as-ink: #111827;
+  --as-rail: #0c1423;
+  --as-slate: #1e293b;
+  --as-raised: #27364b;
+  --as-hover: #32435b;
+  --as-paper: #f5f7fa;
+  --as-paper-raised: #ffffff;
+  --as-paper-muted: #e8eef7;
+  --as-paper-hover: #dce5f2;
+  --as-blue: #a8c7fa;
+  --as-blue-hover: #c2d8fc;
+  --as-blue-ink: #244f8b;
+  --as-blue-ink-hover: #173c71;
+  --as-blue-rgb: 168, 199, 250;
+  --as-type-display: 'Fraunces', Georgia, serif;
+  --as-type-ui: 'Inter', system-ui, sans-serif;
+}
