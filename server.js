@@ -1,5 +1,6 @@
 try { process.loadEnvFile?.(); } catch {}
 import express from "express";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { catalogue, options, preview, resolveMedia } from "./providers.js";
@@ -10,6 +11,14 @@ import adminRouter from "./admin.js";
 import { configEpoch, loadConfig } from './admin-store.js';
 const publicDir = fileURLToPath(new URL("public/", import.meta.url));
 const notFoundPage = fileURLToPath(new URL("public/404.html", import.meta.url));
+const guidePath = "/moviesda-isaidub-alternatives";
+const guideTemplate = readFileSync(new URL("./views/viewing-guide.html", import.meta.url), "utf8");
+
+function siteOrigin(value) {
+  if (!value || !/^https:\/\/[a-z0-9.-]+\/?$/i.test(value)) return null;
+  return URL.parse(value)?.origin ?? null;
+}
+
 const trusted = new Set(
   [
     ...(process.env.TRUSTED_HOSTS || "localhost,127.0.0.1,[::1]").split(","),
@@ -64,6 +73,14 @@ export function createApp(
 ) {
   const app = express();
   app.disable("x-powered-by");
+  const origin = siteOrigin(process.env.SITE_URL || (
+    process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  ));
+  const canonical = origin && `${origin}${guidePath}`;
+  const canonicalHost = origin && new URL(origin).hostname;
+  const guide = guideTemplate.replace("<!-- canonical -->", canonical
+    ? `<link rel="canonical" href="${canonical}" />`
+    : "");
   const visits = new Map();
   let activeLookups = 0;
   let configAttempt, configFreshUntil = 0, lastConfigEpoch = -1;
@@ -97,7 +114,7 @@ export function createApp(
     if (process.env.NODE_ENV === "production")
       res.set("Strict-Transport-Security", "max-age=31536000");
     const host = (req.hostname || "").toLowerCase();
-    if (!trusted.has(host) && !host.endsWith(".vercel.app"))
+    if (!trusted.has(host) && host !== canonicalHost && !host.endsWith(".vercel.app"))
       return res.sendStatus(400);
     if (req.originalUrl.length > 6144) return res.sendStatus(414);
     next();
@@ -111,6 +128,22 @@ export function createApp(
     return res.type("html").sendFile(notFoundPage);
   };
   app.get("/404.html", sendNotFound);
+  app.get(guidePath, (req, res) => {
+    if (req.path !== guidePath) return res.redirect(301, guidePath);
+    res.type("html").send(guide);
+  });
+  app.get("/robots.txt", (req, res) => {
+    const sitemap = origin ? `\nSitemap: ${origin}/sitemap.xml\n` : "";
+    res.type("text/plain").send(`User-agent: *\nDisallow:\n${sitemap}`);
+  });
+  app.get("/sitemap.xml", (req, res) => {
+    if (!canonical) return sendNotFound(req, res);
+    res.type("application/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      `  <url><loc>${canonical}</loc></url>\n</urlset>\n`,
+    );
+  });
   app.use(
     express.static(publicDir, {
       index: false,

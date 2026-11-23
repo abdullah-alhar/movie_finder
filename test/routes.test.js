@@ -31,6 +31,44 @@ const services = {
   trailer: async () => "rPqTIibDpq4",
   artwork: async () => null,
 };
+test("the viewing guide is discoverable and has a single canonical URL", async (t) => {
+  const previous = process.env.SITE_URL;
+  process.env.SITE_URL = "https://aftershow.example/";
+  const app = createApp(services);
+  if (previous === undefined) delete process.env.SITE_URL;
+  else process.env.SITE_URL = previous;
+
+  const server = app.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((done) => server.close(done)));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const path = "/moviesda-isaidub-alternatives";
+  const canonical = "https://aftershow.example" + path;
+
+  const response = await fetch(base + path + "?ref=test");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /^text\/html/);
+  assert.equal(response.headers.get("x-robots-tag"), null);
+  const html = await response.text();
+  assert.ok(html.includes(`<link rel="canonical" href="${canonical}" />`));
+  assert.match(html, /<title>Moviesda &amp; Isaidub: Legal Alternatives \| AfterShow<\/title>/);
+  assert.match(html, /<h1>Legal alternatives to Moviesda and Isaidub<\/h1>/);
+  assert.match(html, /https:\/\/www\.justwatch\.com\/in/);
+  assert.ok((await (await fetch(base)).text()).includes(`href="${path}"`));
+
+  const duplicate = await fetch(base + path + "/", { redirect: "manual" });
+  assert.equal(duplicate.status, 301);
+  assert.equal(duplicate.headers.get("location"), path);
+
+  const robots = await fetch(base + "/robots.txt");
+  assert.equal(robots.status, 200);
+  assert.match(await robots.text(), /Sitemap: https:\/\/aftershow\.example\/sitemap\.xml/);
+  const sitemap = await fetch(base + "/sitemap.xml");
+  assert.equal(sitemap.status, 200);
+  assert.match(sitemap.headers.get("content-type"), /^application\/xml/);
+  assert.ok((await sitemap.text()).includes(`<loc>${canonical}</loc>`));
+});
+
 test("missing pages render the branded 404 without changing API response types", async (t) => {
   const server = createApp(services).listen(0, "127.0.0.1");
   await once(server, "listening");

@@ -28,6 +28,7 @@ Copy `.env.example` to `.env` if you want to customize the port or add keys. Nod
 | OMDB_API_KEY | IMDb rating and vote count from OMDb |
 | MOVIE_SECRET | Persistent signing secret for movie and media links. Production requires at least 32 characters |
 | TRUSTED_HOSTS | Comma-separated list of allowed incoming hostnames |
+| SITE_URL | Public HTTPS origin for the guide’s canonical URL and sitemap; defaults to the Vercel production hostname when available |
 | APPROVED_ORIGINS | Comma-separated extra HTTPS origins for custom links (optional) |
 
 Local development uses a temporary signing key. Set `MOVIE_SECRET` to keep links valid across restarts.
@@ -41,6 +42,10 @@ Set `MOVIE_SECRET` for Preview and Production before deploying. Generate a value
 The provider catalogue URLs (isaidub, moviezda) are stored in the database and managed via the admin dashboard at `/admin/dashboard`. They are not configured via environment variables.
 
 The app stores no catalogue or playback history in the database. Opening a title checks the provider for current seasons, episodes and qualities.
+
+### Submit the viewing guide to Google
+
+Set `SITE_URL` to your preferred public HTTPS origin (for example, `https://aftershow.example`) and deploy. Verify that `/robots.txt` points to `/sitemap.xml` and that the sitemap lists `/moviesda-isaidub-alternatives`. In Google Search Console, submit the sitemap and request indexing for the guide using URL Inspection. In Performance, filter by the guide URL and track the exact queries `moviesda` and `isaidub` separately. Neither indexing nor ranking for these third-party names is guaranteed.
 
 ## Tests
 
