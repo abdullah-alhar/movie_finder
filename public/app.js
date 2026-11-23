@@ -12,7 +12,8 @@ const isSeries   = location.pathname === '/series';
 const isDiscover = (location.pathname === '/' || location.pathname === '') && !q && !params.has('sort') && !params.has('page');
 
 // Mark active nav
-const navId = isSeries ? 'series' : isDiscover ? 'discover' : 'browse';
+const isSearch = location.pathname === '/search';
+const navId = isSearch ? 'search' : isSeries ? 'series' : isDiscover ? 'discover' : 'browse';
 const navEl = $('#' + navId + '-nav');
 if (navEl) navEl.setAttribute('aria-current', 'page');
 
@@ -174,6 +175,7 @@ function buildHeroSlideshow(items) {
           if (!img) {
             img = document.createElement('img');
             img.className = 'hero-bg-img';
+            img.alt = '';
             slide.querySelector('.hero-bg-holder').prepend(img);
           }
           img.src = bgUrl;

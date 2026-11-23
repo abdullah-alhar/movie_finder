@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d0d0f" />
+    <meta name="robots" content="noindex" />
+    <title>Page not found · AfterShow</title>
+    <script>
+      try {
+        var savedTheme = localStorage.getItem('aftershow-theme') || localStorage.getItem('afterframe-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.dataset.theme = savedTheme;
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (themeMeta && savedTheme === 'light') themeMeta.setAttribute('content', '#f4f2ed');
+        }
+      } catch (e) {}
+    </script>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,700;9..144,800&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d0d0f;
+        --surface: #131316;
+        --surface2: #1c1c21;
+        --fg: #f0eee9;
+        --muted: #8b8a90;
+        --border: rgba(255, 255, 255, 0.08);
+        --accent: #ff6b3d;
+        --accent2: #ff8c65;
+      }
+      [data-theme="light"] {
+        color-scheme: light;
+        --bg: #f4f2ed;
+        --surface: #faf8f4;
+        --surface2: #edeae3;
+        --fg: #1a1814;
+        --muted: #6b6762;
+        --border: rgba(0, 0, 0, 0.09);
+        --accent: #c94c1e;
+        --accent2: #d96030;
+      }
+      *, *::before, *::after { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+        background:
+          radial-gradient(1100px 560px at 50% -12%, rgba(255, 107, 61, 0.13), transparent 62%),
+          var(--bg);
+        color: var(--fg);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        line-height: 1.5;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 800;
+        font-size: 19px;
+        letter-spacing: -0.01em;
+      }
+      .brand img { width: 32px; height: 32px; }
+      .brand .accent { color: var(--accent); }
+      .card {
+        width: 100%;
+        max-width: 560px;
+        padding: clamp(28px, 5vw, 46px);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+        text-align: center;
+      }
+      .code {
+        margin: 0 0 6px;
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 800;
+        font-size: clamp(76px, 18vw, 124px);
+        line-height: 0.9;
+        letter-spacing: -0.05em;
+        background: linear-gradient(135deg, var(--accent) 10%, #ff3366 90%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-family: 'Fraunces', Georgia, serif;
+        font-size: clamp(22px, 4vw, 28px);
+        line-height: 1.15;
+      }
+      .message {
+        margin: 0 auto 24px;
+        max-width: 400px;
+        color: var(--muted);
+        font-size: 14.5px;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 5px 5px 14px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        text-align: left;
+      }
+      .search:focus-within {
+        border-color: rgba(255, 107, 61, 0.5);
+        box-shadow: 0 0 0 3px rgba(255, 107, 61, 0.13);
+      }
+      .search svg { flex: 0 0 auto; color: var(--muted); }
+      .search input {
+        flex: 1;
+        min-width: 0;
+        padding: 11px 0;
+        border: 0;
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        font-size: 15px;
+        outline: none;
+      }
+      .search input::placeholder { color: var(--muted); }
+      .search button {
+        flex: 0 0 auto;
+        padding: 10px 18px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-size: 13.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .search button:hover { background: var(--accent2); }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .actions a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-size: 13.5px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+      }
+      .actions a:active { transform: scale(0.97); }
+      .primary { background: var(--accent); color: #fff; }
+      .primary:hover { background: var(--accent2); }
+      .secondary {
+        background: var(--surface2);
+        color: var(--fg);
+        border: 1px solid var(--border);
+      }
+      .secondary:hover { background: var(--bg); }
+      .foot {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+      a:focus-visible, button:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 6px;
+      }
+      @media (max-width: 480px) {
+        body { gap: 18px; padding-left: 14px; padding-right: 14px; }
+        .card { border-radius: 16px; }
+        .actions a { flex: 1 1 100%; }
+        .search button { padding: 10px 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="brand">
+      <img src="/icon.svg" alt="" width="32" height="32" />
+      <span>After<span class="accent">Show</span></span>
+    </header>
+
+    <main class="card">
+      <p class="code" aria-hidden="true">404</p>
+      <h1 id="title">Page not found</h1>
+      <p class="message" id="message">The page you are looking for has moved, expired, or never existed.</p>
+
+      <form class="search" action="/search" method="get" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input type="search" name="q" placeholder="Search films and series…" aria-label="Search films and series" maxlength="120" required />
+        <button type="submit">Search</button>
+      </form>
+
+      <div class="actions">
+        <a class="primary" href="/movies">Browse movies</a>
+        <a class="secondary" href="/series">Series</a>
+        <a class="secondary" href="/">Discover</a>
+      </div>
+    </main>
+
+    <p class="foot">© AfterShow — Free Film &amp; Series Journal</p>
+
+    <script>
+      (function () {
+        var path = location.pathname;
+        if (path.indexOf('/movie/') === 0 || path.indexOf('/watch/') === 0) {
+          document.getElementById('title').textContent = 'This title link is unavailable';
+          document.getElementById('message').textContent = 'The film link has expired or changed. Search the catalogue to find this title again.';
+          document.title = 'Title not found · AfterShow';
+        }
+      })();
+    </script>
+  </body>
+</html>

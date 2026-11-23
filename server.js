@@ -9,6 +9,7 @@ import { approved, updateOrigins, origins, posterUrl, mediaKind } from "./source
 import adminRouter from "./admin.js";
 import { loadConfig } from './admin-store.js';
 const publicDir = fileURLToPath(new URL("public/", import.meta.url));
+const notFoundPage = fileURLToPath(new URL("public/404.html", import.meta.url));
 const trusted = new Set(
   [
     ...(process.env.TRUSTED_HOSTS || "localhost,127.0.0.1,[::1]").split(","),
@@ -93,6 +94,11 @@ export function createApp(
   app.use(
     express.static(publicDir, { index: false, dotfiles: "deny", maxAge: "5m" }),
   );
+  const sendNotFound = (req, res) => {
+    res.status(404).set("X-Robots-Tag", "noindex");
+    if (req.path.startsWith("/api/")) return res.json({ error: "Not found" });
+    return res.type("html").sendFile(notFoundPage);
+  };
   app.use((req, res, next) => {
     const now = Date.now(),
       key = req.socket.remoteAddress;
@@ -143,31 +149,7 @@ export function createApp(
       req.movie = movieFrom(token);
       next();
     } catch {
-      if (req.accepts("html")) {
-        return res.status(404).send(`<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Movie Not Found · AfterShow</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    body { background: #0b0b0e; color: #f1f0ec; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; padding: 20px; }
-    .box { background: #111116; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 32px 24px; max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-    h2 { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
-    p { margin: 0 0 20px; color: #8d8b94; font-size: 14px; line-height: 1.5; }
-    a { display: inline-block; background: #ff6b3d; color: #fff; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h2>Movie Link Unavailable</h2>
-    <p>This film link has expired or updated. Browse the catalogue to find this title.</p>
-    <a href="/">Browse Movies</a>
-  </div>
-</body>
-</html>`);
-      }
-      res.status(404).send("This movie link is invalid.");
+      return sendNotFound(req, res);
     }
   });
   app.get(
@@ -324,12 +306,7 @@ export function createApp(
         );
     res.redirect(target);
   });
-  app.use((req, res) =>
-    res
-      .status(404)
-      .type("html")
-      .send('<h1>Page not found</h1><a href="/">Browse movies</a>'),
-  );
+  app.use(sendNotFound);
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     res.status(err.status === 400 ? 400 : 503).json({

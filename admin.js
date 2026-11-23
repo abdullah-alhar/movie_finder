@@ -1,9 +1,9 @@
-try { process.loadEnvFile?.(); } catch {}
+try { process.loadEnvFile?.(); } catch { }
 import { randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
-import express                                        from 'express';
-import { approved, origins, updateOrigins }                     from './sources.js';
+import express from 'express';
+import { approved, origins, updateOrigins } from './sources.js';
 
-const router    = express.Router();
+const router = express.Router();
 import { database, digest, loadData, saveData } from './admin-store.js';
 import { readHTML } from './providers.js';
 /* ─── Password Verification (PBKDF2-SHA256) ───────────────────────────────── */
@@ -25,7 +25,7 @@ function verifyPassword(plain, stored) {
 
 /* ─── Session Management (24 hours) ───────────────────────────────────────── */
 const SESSION_TTL = 86_400_000;
-const cookie = {httpOnly:true,sameSite:'strict',secure:process.env.NODE_ENV==='production',path:'/admin'};
+const cookie = { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production', path: '/admin' };
 function tokenOf(req) { return /(?:^|;\s*)af_admin=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie || '')?.[1]; }
 
 const sessionCache = new Map();
@@ -38,7 +38,7 @@ async function getSession(req) {
     return cached.session;
   }
   try {
-    const row = (await database().query('SELECT email,csrf,extract(epoch from expires)*1000 as exp FROM aftershow_express.sessions WHERE digest=$1 AND expires>now()',[digest(token)])).rows[0];
+    const row = (await database().query('SELECT email,csrf,extract(epoch from expires)*1000 as exp FROM aftershow_express.sessions WHERE digest=$1 AND expires>now()', [digest(token)])).rows[0];
     if (!row) {
       sessionCache.delete(token);
       return null;
@@ -91,7 +91,7 @@ function checkCsrf(req) {
 }
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
-  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /* ─── Admin CSS ───────────────────────────────────────────────────────────── */
 const CSS = `
@@ -127,26 +127,54 @@ code{background:var(--s3);border-radius:5px;padding:2px 6px;font-size:12.5px;col
 .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--s3);color:var(--mu)}
 .badge-green{background:rgba(34,197,94,.15);color:#86efac;border:1px solid rgba(34,197,94,.3)}
 .badge-orange{background:rgba(255,107,61,.15);color:var(--ac2);border:1px solid rgba(255,107,61,.3)}
+:focus-visible{outline:2px solid var(--ac2);outline-offset:2px;border-radius:6px}
+.admin-nav{position:fixed;top:0;left:0;right:0;min-height:56px;background:rgba(11,11,14,.96);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid var(--bo);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;z-index:100}
+.admin-brand{display:flex;align-items:center;gap:12px;min-width:0}
+.admin-brand-name{font-family:'Fraunces',Georgia,serif;font-weight:800;font-size:18px;white-space:nowrap}
+.admin-actions{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--mu);min-width:0}
+.admin-site-link{color:var(--fg);display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;background:var(--s2);border:1px solid var(--bo);border-radius:8px;white-space:nowrap}
+.admin-site-link:hover{text-decoration:none;background:var(--s3)}
+.admin-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+.msg-wrap{width:100%;max-width:420px}
+.msg-card{text-align:center}
+.msg-card h2{font-size:20px;margin-bottom:8px}
+.msg-card p{color:var(--mu);font-size:14px;margin-bottom:18px;line-height:1.55}
+.login-mark{width:48px;height:48px;margin:0 auto 10px}
+.login-back{display:block;text-align:center;font-size:12.5px;color:var(--mu);margin-top:18px}
+.login-back:hover{color:var(--fg);text-decoration:none}
+@media (max-width:720px){
+  .admin-nav{flex-wrap:wrap;padding:10px 16px;gap:8px}
+  .admin-actions{width:100%;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .admin-email{display:none}
+  input,select,textarea{font-size:16px}
+}
+@media (max-width:420px){
+  .admin-brand .badge{display:none}
+}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">`;
 
 function navHTML(email, csrf) {
-  return `<nav style="position:fixed;top:0;left:0;right:0;height:56px;background:rgba(11,11,14,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--bo);display:flex;align-items:center;justify-content:space-between;padding:0 28px;z-index:100">
-    <div style="display:flex;align-items:center;gap:12px">
-      <span style="font-family:'Fraunces',Georgia,serif;font-weight:800;font-size:18px"><span style="color:var(--ac)">After</span>Show Admin</span>
+  return `<nav class="admin-nav">
+    <div class="admin-brand">
+      <span class="admin-brand-name"><span style="color:var(--ac)">After</span>Show Admin</span>
       <span class="badge badge-green">LIVE SYNCED</span>
     </div>
-    <div style="display:flex;align-items:center;gap:16px;font-size:13px;color:var(--mu)">
-      <a href="/" target="_blank" style="color:var(--fg);display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 12px;background:var(--s2);border:1px solid var(--bo);border-radius:8px">Open Site ↗</a>
-      <span>${esc(email)}</span>
+    <div class="admin-actions">
+      <a href="/" target="_blank" class="admin-site-link">Open Site ↗</a>
+      <span class="admin-email" title="${esc(email)}">${esc(email)}</span>
       <form method="POST" action="/admin/logout" style="margin:0">
         <input type="hidden" name="_csrf" value="${esc(csrf)}">
         <button class="btn bs bsm" type="submit">Sign out</button>
       </form>
     </div>
   </nav>`;
+}
+
+function messagePage(title, message, actionHref = '/admin/login', actionText = '← Back to sign in') {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} · AfterShow Admin</title>${CSS}</head><body><div class="msg-wrap"><div class="card msg-card"><h2>${esc(title)}</h2><p>${esc(message)}</p><a class="btn bs" href="${esc(actionHref)}">${esc(actionText)}</a></div></div></body></html>`;
 }
 
 /* ─── Root Redirect ───────────────────────────────────────────────────────── */
@@ -168,13 +196,13 @@ router.get('/login', async (req, res) => {
   if (await getSession(req)) return res.redirect('/admin/dashboard');
   const d = await loadData();
   if (!d.admin) {
-    return res.status(403).send(`<!doctype html><html><head>${CSS}</head><body><div class="card" style="max-width:400px"><h2 style="color:var(--rd)">Admin Not Configured</h2><p style="margin-top:8px">Admin database not initialized.</p></div></body></html>`);
+    return res.status(403).send(messagePage('Admin not configured', 'The admin database has not been initialized yet.'));
   }
-  res.set('Content-Type','text/html;charset=utf-8');
+  res.set('Content-Type', 'text/html;charset=utf-8');
   res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · AfterShow Admin</title>${CSS}</head><body>
   <div style="width:100%;max-width:390px">
     <div style="text-align:center;margin-bottom:28px">
-      <div style="font-size:42px;margin-bottom:10px">🎬</div>
+      <img class="login-mark" src="/icon.svg" alt="" width="48" height="48">
       <h1 style="font-size:28px">AfterShow <span style="color:var(--ac)">Admin</span></h1>
       <p style="color:var(--mu);margin-top:6px;font-size:13.5px">Sign in to manage provider links and scraping engines</p>
     </div>
@@ -191,33 +219,34 @@ router.get('/login', async (req, res) => {
         <button class="btn bp" type="submit" style="width:100%;padding:12px;margin-top:4px">Sign in →</button>
       </form>
     </div>
-    <p style="text-align:center;color:var(--fa);font-size:11.5px;margin-top:14px">Secured with PBKDF2-SHA256 · Verified against PostgreSQL</p>
+    <p style="text-align:center;color:var(--mu);font-size:11.5px;margin-top:14px">Secured with PBKDF2-SHA256 · Verified against PostgreSQL</p>
+    <a class="login-back" href="/">← Back to site</a>
   </div></body></html>`);
 });
 
 router.post('/login', express.urlencoded({ extended: false }), async (req, res) => {
-  const ip  = req.socket.remoteAddress;
-  const rl  = checkRateLimit(ip);
+  const ip = req.socket.remoteAddress;
+  const rl = checkRateLimit(ip);
   if (!rl.ok) {
-    res.set('Content-Type','text/html;charset=utf-8');
-    return res.status(429).send(`<!doctype html><html><head>${CSS}</head><body><div style="max-width:390px;width:100%"><div class="al ae">Too many failed attempts. Try again in ${rl.mins} min${rl.mins!==1?'s':''}.</div><a class="btn bs" href="/admin/login">← Back</a></div></body></html>`);
+    res.set('Content-Type', 'text/html;charset=utf-8');
+    return res.status(429).send(messagePage('Too many attempts', `Too many failed attempts. Try again in ${rl.mins} min${rl.mins !== 1 ? 's' : ''}.`));
   }
   const d = await loadData();
-  if (!d.admin) return res.status(403).send('Forbidden');
+  if (!d.admin) return res.status(403).send(messagePage('Access denied', 'Admin access is not configured for this deployment.'));
   const em = (req.body.email || '').toLowerCase().trim();
   const pw = req.body.password || '';
   const ok = d.admin.email === em && verifyPassword(pw, d.admin.passwordHash);
   if (!ok) {
     logFailedAttempt(ip);
-    res.set('Content-Type','text/html;charset=utf-8');
-    return res.status(401).send(`<!doctype html><html><head>${CSS}</head><body><div style="max-width:390px;width:100%"><div class="al ae">Invalid email or password.</div><a class="btn bs" href="/admin/login">← Try again</a></div></body></html>`);
+    res.set('Content-Type', 'text/html;charset=utf-8');
+    return res.status(401).send(messagePage('Sign in failed', 'Invalid email or password.', '/admin/login', '← Try again'));
   }
   logActivity(d, 'Admin signed in', em);
   const token = randomBytes(32).toString("hex");
   const csrf = randomBytes(16).toString("hex");
-  await saveData(d,{session:{token,csrf}});
+  await saveData(d, { session: { token, csrf } });
   sessionCache.set(token, { session: { email: em, csrf }, expires: Date.now() + SESSION_TTL });
-  res.cookie("af_admin",token,{...cookie,maxAge:SESSION_TTL});
+  res.cookie("af_admin", token, { ...cookie, maxAge: SESSION_TTL });
   res.redirect('/admin/dashboard');
 });
 
@@ -225,21 +254,21 @@ router.post('/logout', requireSession, express.urlencoded({ extended: false }), 
   if (!checkCsrf(req)) return res.sendStatus(403);
   const token = tokenOf(req);
   if (token) sessionCache.delete(token);
-  await database().query('DELETE FROM aftershow_express.sessions WHERE digest=$1',[digest(token)]);
-  res.clearCookie('af_admin',cookie);
+  await database().query('DELETE FROM aftershow_express.sessions WHERE digest=$1', [digest(token)]);
+  res.clearCookie('af_admin', cookie);
   res.redirect('/admin/login');
 });
 
 /* ─── API: Test Provider / Custom Link Live ───────────────────────────────── */
 router.get('/api/test-link', requireSession, async (req, res) => {
   const target = req.query.url;
-  if (!approved(target)) return res.status(400).json({ok:false,error:'Invalid URL. Must be a valid HTTPS address.'});
+  if (!approved(target)) return res.status(400).json({ ok: false, error: 'Invalid URL. Must be a valid HTTPS address.' });
   const start = Date.now();
   try {
     await readHTML(target, 6000);
-    res.json({ok:true,status:200,latencyMs:Date.now()-start});
+    res.json({ ok: true, status: 200, latencyMs: Date.now() - start });
   } catch (err) {
-    res.json({ok:false,error: err.message || 'Provider unavailable'});
+    res.json({ ok: false, error: err.message || 'Provider unavailable' });
   }
 });
 
@@ -247,47 +276,63 @@ router.get('/api/test-link', requireSession, async (req, res) => {
 router.get('/dashboard', requireSession, async (req, res) => {
   const d    = await loadData(database(), true);
   const sess = req.adminSess;
-  const cfg  = d.config || {};
-  const lks  = cfg.customLinks || [];
-  const log  = (d.activityLog || []).slice(0, 15);
-  const isaidubRunning  = origins.isaidub || 'https://isaidub.green';
+  const cfg = d.config || {};
+  const lks = cfg.customLinks || [];
+  const log = (d.activityLog || []).slice(0, 15);
+  const isaidubRunning = origins.isaidub || 'https://isaidub.green';
   const moviezdaRunning = origins.moviezda || 'https://moviesda36.com';
 
-  res.set('Content-Type','text/html;charset=utf-8');
+  res.set('Content-Type', 'text/html;charset=utf-8');
   res.send(`<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard · AfterShow Admin</title>${CSS}
 <style>
 body{align-items:flex-start;justify-content:flex-start;padding:76px 24px 60px}
 .wrap{max-width:920px;width:100%;margin:0 auto}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bo);margin-bottom:28px}
-.tab{padding:11px 20px;font-size:14px;font-weight:600;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
-.tab.on{color:var(--ac);border-bottom-color:var(--ac)}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+.page-title{font-size:clamp(24px,4.5vw,30px);margin-bottom:6px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bo);margin-bottom:28px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:11px 20px;font-size:14px;font-weight:600;color:var(--mu);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;flex:0 0 auto;white-space:nowrap}
+.tab:hover{color:var(--fg)}
+.tab.on,.tab[aria-selected="true"]{color:var(--ac);border-bottom-color:var(--ac)}
 .pane{display:none}.pane.on{display:block}
-.lr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--bo)}
+.lr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--bo);flex-wrap:wrap}
 .lr:last-child{border-bottom:0}
 .lt{flex:1;min-width:0}
 .ll{font-size:14px;font-weight:600}
-.lu{font-size:12.5px;color:var(--mu);margin-top:2px}
-.logr{font-size:13px;padding:8px 0;border-bottom:1px solid var(--bo);display:flex;gap:12px;align-items:center}
+.lu{font-size:12.5px;color:var(--mu);margin-top:2px;overflow-wrap:anywhere}
+.lr-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.logr{font-size:13px;padding:8px 0;border-bottom:1px solid var(--bo);display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
 .logr:last-child{border-bottom:0}
+.logr .when{color:var(--mu);font-size:12px;margin-left:auto;white-space:nowrap}
 .provider-box{background:var(--s2);border:1px solid var(--bo);border-radius:12px;padding:18px;margin-bottom:16px}
-.provider-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.provider-title{font-size:15px;font-weight:700;color:#fff}
-.provider-active-url{font-size:12.5px;color:var(--mu);margin-top:6px;display:flex;align-items:center;gap:6px}
+.provider-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.provider-title{font-size:15px;font-weight:700;color:var(--fg)}
+.provider-active-url{font-size:12.5px;color:var(--mu);margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-wrap:anywhere}
 .ping-res{font-size:12px;font-weight:600;margin-top:8px}
 .ping-res.ok{color:var(--gr)}.ping-res.fail{color:var(--rd)}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:22px}
-.stat-card{background:var(--s2);border:1px solid var(--bo);border-radius:10px;padding:16px}
-.stat-val{font-size:24px;font-weight:800;color:var(--ac);font-family:'Fraunces',Georgia,serif}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:14px;margin-bottom:22px}
+.stat-card{background:var(--s2);border:1px solid var(--bo);border-radius:10px;padding:16px;min-width:0}
+.stat-val{font-size:clamp(18px,3vw,24px);font-weight:800;color:var(--ac);font-family:'Fraunces',Georgia,serif;overflow-wrap:anywhere}
 .stat-lbl{font-size:12px;font-weight:600;color:var(--mu);text-transform:uppercase;margin-top:4px}
+@media (max-width:720px){
+  body{padding:118px 16px 40px}
+  .wrap{max-width:100%}
+  .card{padding:18px}
+  .tabs{margin-bottom:20px}
+}
+@media (max-width:560px){
+  .logr .when{margin-left:0;width:100%}
+  .lr-actions{width:100%;justify-content:flex-end}
+}
 </style>
 </head><body>
 ${navHTML(sess.email, sess.csrf)}
 <div class="wrap">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px">
+  <div class="page-head">
     <div>
-      <h1 style="font-size:30px;margin-bottom:6px">Admin Dashboard</h1>
+      <h1 class="page-title">Admin Dashboard</h1>
       <p style="color:var(--mu);font-size:14px">Manage provider links, dynamic domain routing, and scraping options.</p>
     </div>
     <span class="badge badge-green">LIVE SYSTEM READY</span>
@@ -295,11 +340,11 @@ ${navHTML(sess.email, sess.csrf)}
 
   <div class="stats-grid">
     <div class="stat-card">
-      <div class="stat-val">${isaidubRunning.replace('https://','')}</div>
+      <div class="stat-val">${isaidubRunning.replace('https://', '')}</div>
       <div class="stat-lbl">Active Isaidub Source</div>
     </div>
     <div class="stat-card">
-      <div class="stat-val">${moviezdaRunning.replace('https://','')}</div>
+      <div class="stat-val">${moviezdaRunning.replace('https://', '')}</div>
       <div class="stat-lbl">Active Moviezda Source</div>
     </div>
     <div class="stat-card">
@@ -308,15 +353,15 @@ ${navHTML(sess.email, sess.csrf)}
     </div>
   </div>
 
-  <div class="tabs">
-    <button type="button" class="tab on" data-tab="providers" onclick="switchTab('providers')">Movie Providers</button>
-    <button type="button" class="tab" data-tab="links" onclick="switchTab('links')">Custom Links</button>
-    <button type="button" class="tab" data-tab="security" onclick="switchTab('security')">Security</button>
-    <button type="button" class="tab" data-tab="activity" onclick="switchTab('activity')">Activity Log</button>
+  <div class="tabs" role="tablist" aria-label="Dashboard sections">
+    <button type="button" id="tab-providers" class="tab on" data-tab="providers" role="tab" aria-selected="true" aria-controls="pane-providers" onclick="switchTab('providers')">Movie Providers</button>
+    <button type="button" id="tab-links" class="tab" data-tab="links" role="tab" aria-selected="false" aria-controls="pane-links" onclick="switchTab('links')">Custom Links</button>
+    <button type="button" id="tab-security" class="tab" data-tab="security" role="tab" aria-selected="false" aria-controls="pane-security" onclick="switchTab('security')">Security</button>
+    <button type="button" id="tab-activity" class="tab" data-tab="activity" role="tab" aria-selected="false" aria-controls="pane-activity" onclick="switchTab('activity')">Activity Log</button>
   </div>
 
   <!-- ── Tab 1: Providers ── -->
-  <div id="pane-providers" class="pane on" data-pane="providers">
+  <div id="pane-providers" class="pane on" data-pane="providers" role="tabpanel" aria-labelledby="tab-providers">
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <div>
@@ -342,7 +387,7 @@ ${navHTML(sess.email, sess.csrf)}
           <div class="provider-active-url">
             <span>Live Scraper Origin:</span> <code>${esc(isaidubRunning)}</code>
           </div>
-          <div id="ping_isaidub" class="ping-res"></div>
+          <div id="ping_isaidub" class="ping-res" role="status" aria-live="polite"></div>
         </div>
 
         <!-- Moviezda -->
@@ -355,7 +400,7 @@ ${navHTML(sess.email, sess.csrf)}
           <div class="provider-active-url">
             <span>Live Scraper Origin:</span> <code>${esc(moviezdaRunning)}</code>
           </div>
-          <div id="ping_moviezda" class="ping-res"></div>
+          <div id="ping_moviezda" class="ping-res" role="status" aria-live="polite"></div>
         </div>
 
         <button class="btn bp" type="submit" style="padding:12px 24px">Save & Apply URLs Now</button>
@@ -364,22 +409,22 @@ ${navHTML(sess.email, sess.csrf)}
   </div>
 
   <!-- ── Tab 2: Custom Links ── -->
-  <div id="pane-links" class="pane" data-pane="links">
+  <div id="pane-links" class="pane" data-pane="links" role="tabpanel" aria-labelledby="tab-links">
     <div class="card">
       <h3 style="font-size:18px;margin-bottom:14px">Add Direct Movie Link</h3>
       <form method="POST" action="/admin/add-link">
         <input type="hidden" name="_csrf" value="${esc(sess.csrf)}">
         <div class="fi">
-          <label>Title / Name</label>
-          <input type="text" name="label" required maxlength="120" placeholder="e.g. Leo (2023) Tamil 1080p">
+          <label for="custom_link_label">Title / Name</label>
+          <input id="custom_link_label" type="text" name="label" required maxlength="120" placeholder="e.g. Leo (2023) Tamil 1080p">
         </div>
         <div class="fi">
-          <label>Direct Stream or Download URL</label>
+          <label for="custom_link_url">Direct Stream or Download URL</label>
           <input id="custom_link_url" type="url" name="url" required placeholder="https://...">
         </div>
         <div class="fi">
-          <label>Notes (Resolution, Audio, Source)</label>
-          <input type="text" name="notes" placeholder="e.g. 1080p Original Audio Dual">
+          <label for="custom_link_notes">Notes (Resolution, Audio, Source)</label>
+          <input id="custom_link_notes" type="text" name="notes" placeholder="e.g. 1080p Original Audio Dual">
         </div>
         <button class="btn bp" type="submit">Add to Database</button>
       </form>
@@ -388,15 +433,15 @@ ${navHTML(sess.email, sess.csrf)}
     <div class="card">
       <h3 style="font-size:18px;margin-bottom:14px">Saved Links (${lks.length})</h3>
       ${lks.length === 0
-        ? `<p style="color:var(--mu);font-size:13.5px">No custom links added yet.</p>`
-        : lks.map((l, i) => `
+      ? `<p style="color:var(--mu);font-size:13.5px">No custom links added yet.</p>`
+      : lks.map((l, i) => `
           <div class="lr">
             <div class="lt">
               <div class="ll">${esc(l.label)}</div>
               <div class="lu"><a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.url)}</a></div>
               ${l.notes ? `<div style="font-size:11.5px;color:var(--fa);margin-top:3px">${esc(l.notes)}</div>` : ''}
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div class="lr-actions">
               <a href="${esc(l.url)}" target="_blank" class="btn bs bsm">Open</a>
               <form method="POST" action="/admin/remove-link" style="margin:0">
                 <input type="hidden" name="_csrf" value="${esc(sess.csrf)}">
@@ -409,22 +454,22 @@ ${navHTML(sess.email, sess.csrf)}
   </div>
 
   <!-- ── Tab 3: Security ── -->
-  <div id="pane-security" class="pane" data-pane="security">
+  <div id="pane-security" class="pane" data-pane="security" role="tabpanel" aria-labelledby="tab-security">
     <div class="card" style="max-width:540px">
       <h3 style="font-size:18px;margin-bottom:14px">Change Password</h3>
       <form method="POST" action="/admin/change-password" autocomplete="off">
         <input type="hidden" name="_csrf" value="${esc(sess.csrf)}">
         <div class="fi">
-          <label>Current Password</label>
-          <input type="password" name="current" required placeholder="Your current password">
+          <label for="current_password">Current Password</label>
+          <input id="current_password" type="password" name="current" required placeholder="Your current password">
         </div>
         <div class="fi">
-          <label>New Password <span class="badge">min 8 characters</span></label>
-          <input type="password" name="newpass" required minlength="8" placeholder="At least 8 characters">
+          <label for="new_password">New Password <span class="badge">min 8 characters</span></label>
+          <input id="new_password" type="password" name="newpass" required minlength="8" placeholder="At least 8 characters">
         </div>
         <div class="fi">
-          <label>Confirm New Password</label>
-          <input type="password" name="confirm" required minlength="8" placeholder="Repeat new password">
+          <label for="confirm_password">Confirm New Password</label>
+          <input id="confirm_password" type="password" name="confirm" required minlength="8" placeholder="Repeat new password">
         </div>
         <button class="btn bp" type="submit">Update Password</button>
       </form>
@@ -432,16 +477,16 @@ ${navHTML(sess.email, sess.csrf)}
   </div>
 
   <!-- ── Tab 4: Activity ── -->
-  <div id="pane-activity" class="pane" data-pane="activity">
+  <div id="pane-activity" class="pane" data-pane="activity" role="tabpanel" aria-labelledby="tab-activity">
     <div class="card">
       <h3 style="font-size:18px;margin-bottom:14px">System Audit Trail</h3>
       ${log.length === 0
-        ? `<p style="color:var(--mu);font-size:13.5px">No audit entries yet.</p>`
-        : log.map(l => `
+      ? `<p style="color:var(--mu);font-size:13.5px">No audit entries yet.</p>`
+      : log.map(l => `
           <div class="logr">
             <span class="badge badge-orange">${esc(l.action)}</span>
             <span style="color:var(--fg);font-weight:500">${esc(l.who)}</span>
-            <span style="color:var(--mu);font-size:12px;margin-left:auto">${new Date(l.at).toLocaleString()}</span>
+            <span class="when">${new Date(l.at).toLocaleString()}</span>
           </div>`).join('')}
     </div>
   </div>
@@ -457,8 +502,9 @@ function switchTab(name) {
     var b = document.querySelector('[data-tab="' + key + '"]');
     var p = document.getElementById('pane-' + key);
     if (b) {
-      if (isCurrent) b.classList.add('on');
-      else b.classList.remove('on');
+      b.classList.toggle('on', isCurrent);
+      b.setAttribute('aria-selected', String(isCurrent));
+      b.tabIndex = isCurrent ? 0 : -1;
     }
     if (p) {
       if (isCurrent) {
@@ -482,6 +528,21 @@ document.addEventListener('click', function(e) {
   if (btn && btn.hasAttribute('data-tab')) {
     e.preventDefault();
     window.switchTab(btn.getAttribute('data-tab'));
+  }
+});
+
+// Left/right arrow navigation between tabs
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  var tab = e.target.closest ? e.target.closest('.tab') : null;
+  if (!tab) return;
+  e.preventDefault();
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  var index = tabs.indexOf(tab);
+  var next = tabs[(index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+  if (next) {
+    next.focus();
+    window.switchTab(next.getAttribute('data-tab'));
   }
 });
 
@@ -564,7 +625,7 @@ router.post('/add-link', requireSession, express.urlencoded({ extended: false })
   if (typeof label === 'string' && label.trim()) {
     d.config.customLinks.push({
       label: label.slice(0, 120).trim(),
-      url:   url.slice(0, 500),
+      url: url.slice(0, 500),
       notes: (notes || '').slice(0, 300).trim(),
       addedAt: new Date().toISOString(),
     });
@@ -577,8 +638,8 @@ router.post('/add-link', requireSession, express.urlencoded({ extended: false })
 /* ─── Actions: Remove Link ────────────────────────────────────────────────── */
 router.post('/remove-link', requireSession, express.urlencoded({ extended: false }), async (req, res) => {
   if (!checkCsrf(req)) return res.status(403).send('Bad CSRF token');
-  const d   = await loadData();
-  d.config  = d.config || {};
+  const d = await loadData();
+  d.config = d.config || {};
   const idx = Number(req.body.index);
   if (Number.isInteger(idx) && idx >= 0 && idx < (d.config.customLinks || []).length) {
     const [rem] = d.config.customLinks.splice(idx, 1);
@@ -594,7 +655,7 @@ router.post('/change-password', requireSession, express.urlencoded({ extended: f
   const d = await loadData();
   const { current, newpass, confirm } = req.body;
   const bail = msg => {
-    res.set('Content-Type','text/html;charset=utf-8');
+    res.set('Content-Type', 'text/html;charset=utf-8');
     return res.status(400).send(`<!doctype html><html><head>${CSS}</head><body><div style="max-width:400px;width:100%"><div class="al ae">${esc(msg)}</div><a class="btn bs" href="/admin/dashboard#s">← Back</a></div></body></html>`);
   };
 
@@ -607,8 +668,8 @@ router.post('/change-password', requireSession, express.urlencoded({ extended: f
 
   d.admin.passwordHash = hashPassword(newpass);
   logActivity(d, 'Password updated', req.adminSess.email);
-  await saveData(d,{revoke:true});
-  res.clearCookie("af_admin",cookie); // force re-login everywhere with new password
+  await saveData(d, { revoke: true });
+  res.clearCookie("af_admin", cookie); // force re-login everywhere with new password
   res.redirect('/admin/login');
 });
 

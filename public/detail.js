@@ -97,7 +97,7 @@ function episodePicker(episodes, selected, choose, item = {}, selectedSeason = 1
         img.src = epInfo.image;
       }
     });
-  }).catch(() => {});
+  }).catch(() => { });
 
   const prevBtn = head.querySelector(".ep-prev");
   const nextBtn = head.querySelector(".ep-next");
@@ -125,7 +125,7 @@ export async function showDetail(main) {
   item = { ...item, url: base, image: safeImage(item.image || item.poster) };
   document.title = item.title + " · AfterShow";
   main.innerHTML =
-    '<a class="back" href="/movies"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg> Browse films</a><section class="detail-header"><div class="detail-cover"><span>' +
+    '<a class="back" href="/movies"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg> <span>Browse films</span></a><section class="detail-header"><div class="detail-cover"><span>' +
     esc(item.title) +
     '</span></div><div class="detail-copy"><p class="eyebrow">FILM DETAILS</p><h1>' +
     esc(item.title) +
@@ -163,7 +163,7 @@ export async function showDetail(main) {
   if (item.image) video.poster = item.image;
   if (item.kind === "tv") {
     find(".back").href = "/series";
-    find(".back").textContent = "Browse series";
+    find(".back span").textContent = "Browse series";
     find(".eyebrow").textContent = "SERIES DETAILS";
     find("#watch h2").textContent = "Watch series";
     video.setAttribute("aria-label", "Episode player");
@@ -191,7 +191,7 @@ export async function showDetail(main) {
       if (/^[\w-]{11}$/.test(video))
         trailer.href = "https://www.youtube.com/watch?v=" + video;
     })
-    .catch(() => {});
+    .catch(() => { });
   async function metadata() {
     try {
       const data = await json(base + "/metadata");
@@ -211,14 +211,14 @@ export async function showDetail(main) {
       else if (!item.image) {
         json(
           "/poster-artwork?" +
-            new URLSearchParams({
-              title: item.title,
-              year: item.year || "",
-              kind: item.kind || "movie",
-            }),
+          new URLSearchParams({
+            title: item.title,
+            year: item.year || "",
+            kind: item.kind || "movie",
+          }),
         )
           .then((data) => cover(data.image))
-          .catch(() => {});
+          .catch(() => { });
       }
       if (safeImage(data.backdrop)) video.poster = data.backdrop;
       if (data.rating) {
@@ -245,7 +245,7 @@ export async function showDetail(main) {
           `<span class="rating-badge"><span class="star">★</span> ${Number(rating.score).toFixed(1)} <span class="rating-source">${rating.source || 'IMDb'}</span></span>`;
       }
     })
-    .catch(() => {});
+    .catch(() => { });
   let selectedSeason, selectedEpisode, selectedOption, selectedPart;
   let sequence = [];
   const picker = find(".selection-picker");
@@ -382,7 +382,7 @@ export async function showDetail(main) {
       );
       matches = matches.filter((o) => (o.episode ?? -1) === selectedEpisode);
     }
-    const parts = [...new Set(all.map(partNumber).filter(n => n != null))].sort((a,b) => a-b);
+    const parts = [...new Set(all.map(partNumber).filter(n => n != null))].sort((a, b) => a - b);
     const multipart = !series && parts.length > 1;
     if (multipart) {
       if (!parts.includes(selectedPart) && !(selectedPart === null && all.some(o => partNumber(o) === null))) selectedPart = parts[0];
@@ -395,12 +395,12 @@ export async function showDetail(main) {
     const initial = Math.max(0, matches.findIndex(o => o.resolution === preferred));
     prepareOption(matches[initial]);
     sequence = series ? [...new Map(all.filter(o => o.episode != null).map(o =>
-      [[o.season ?? -1,o.episode].join("/"), [o.season ?? -1,o.episode,undefined]])).values()]
-      .sort((a,b) => a[0]-b[0] || a[1]-b[1]) : parts.map(n => [undefined,undefined,n]);
-    const position = sequence.findIndex(([s,e,p]) => s === selectedSeason && e === selectedEpisode && p === selectedPart);
-    for (const [selector, step, name] of [[".previous",-1,"Previous"],[".next",1,"Next"]]) {
+      [[o.season ?? -1, o.episode].join("/"), [o.season ?? -1, o.episode, undefined]])).values()]
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]) : parts.map(n => [undefined, undefined, n]);
+    const position = sequence.findIndex(([s, e, p]) => s === selectedSeason && e === selectedEpisode && p === selectedPart);
+    for (const [selector, step, name] of [[".previous", -1, "Previous"], [".next", 1, "Next"]]) {
       const button = find(selector);
-      const dest = position >= 0 ? sequence[position+step] : undefined;
+      const dest = position >= 0 ? sequence[position + step] : undefined;
       button.hidden = sequence.length < 2;
       button.disabled = !dest;
       button.textContent = name + (series ? " episode" : " part");
@@ -463,11 +463,6 @@ export async function showDetail(main) {
     find(".download-selection").textContent = series || multipart ? selectedLabel : "";
     picker.querySelector(".selection-title").textContent = selectedLabel;
     if (matches.length) {
-      const play = document.createElement("button");
-      play.className = "primary";
-      play.innerHTML = icon("play") + (selectedOption.episode != null ? "Play episode " + selectedOption.episode : "Play");
-      actions.append(play);
-
       // In-Player Quality Popup Overlay inside video-wrap (Asks quality before playback starts)
       let promptOverlay = find(".player-quality-prompt");
       if (!promptOverlay) {
@@ -546,9 +541,9 @@ export async function showDetail(main) {
       });
 
       function showQualityPicker() {
+        find("#watch")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         if (matches.length > 1 && promptOverlay) {
           promptOverlay.classList.remove("hidden");
-          find("#watch")?.scrollIntoView({ behavior: 'smooth' });
         } else {
           bigPlay?.classList.add("hidden");
           playSelected();
@@ -556,7 +551,6 @@ export async function showDetail(main) {
       }
 
       bigPlay.onclick = () => showQualityPicker();
-      play.onclick = () => showQualityPicker();
       const watchLink = find('.actions .primary[href="#watch"]');
       if (watchLink) {
         watchLink.onclick = (e) => {
