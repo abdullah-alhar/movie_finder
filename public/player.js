@@ -68,6 +68,9 @@ function doWrap(video, videoWrap) {
   videoWrap.insertBefore(player, video);
   player.appendChild(skin);
   skin.appendChild(video);
+  const skinStyle = document.createElement('style');
+  skinStyle.textContent = 'media-container.video-skin, media-poster { background: transparent !important; }';
+  skin.shadowRoot?.append(skinStyle);
 
   /* ── In-Player Quality Selector ─────────────────────────────────────── */
   const reinjectQuality = setupInPlayerQuality(video, skin);
