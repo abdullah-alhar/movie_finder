@@ -19,17 +19,46 @@ function siteOrigin(value) {
   return URL.parse(value)?.origin ?? null;
 }
 
+// Hosts allowed to reach the app. Add custom domains here or via the
+// comma-separated TRUSTED_HOSTS env var. Full URLs, ports and *.wildcards
+// are accepted and normalised to bare hostnames.
+const defaultTrustedHosts = [
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+  "moviesda.dpdns.org",
+];
+function normalizeHost(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+  } catch {
+    return raw.replace(/:\d+$/, "").replace(/\.$/, "");
+  }
+}
 const trusted = new Set(
   [
-    ...(process.env.TRUSTED_HOSTS || "localhost,127.0.0.1,[::1]").split(","),
+    ...defaultTrustedHosts,
+    ...(process.env.TRUSTED_HOSTS || "").split(","),
     process.env.RENDER_EXTERNAL_HOSTNAME,
     process.env.VERCEL_URL,
     process.env.VERCEL_BRANCH_URL,
     process.env.VERCEL_PROJECT_PRODUCTION_URL,
   ]
     .filter(Boolean)
-    .map((host) => host.trim().toLowerCase()),
+    .map(normalizeHost)
+    .filter(Boolean),
 );
+function hostAllowed(host) {
+  if (!host) return false;
+  const clean = normalizeHost(host);
+  if (trusted.has(clean) || clean.endsWith(".vercel.app")) return true;
+  for (const entry of trusted)
+    if (entry.startsWith("*.") && (clean === entry.slice(2) || clean.endsWith(entry.slice(1))))
+      return true;
+  return false;
+}
 const asText = (value) =>
   typeof value === "string" ? value.trim().slice(0, 120) : "";
 const number = (value, max) =>
@@ -135,9 +164,8 @@ export function createApp(
     });
     if (process.env.NODE_ENV === "production")
       res.set("Strict-Transport-Security", "max-age=31536000");
-    const host = (req.hostname || "").toLowerCase();
-    if (!trusted.has(host) && host !== siteHost && !host.endsWith(".vercel.app"))
-      return res.sendStatus(400);
+    const host = normalizeHost(req.hostname);
+    if (!hostAllowed(host) && host !== siteHost) return res.sendStatus(400);
     if (req.originalUrl.length > 6144) return res.sendStatus(414);
     next();
   });

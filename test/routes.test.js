@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { request } from "node:http";
 
 process.env.MOVIE_SECRET = "offline-test-secret";
 const { createApp } = await import("../server.js");
@@ -31,6 +32,40 @@ const services = {
   trailer: async () => "rPqTIibDpq4",
   artwork: async () => null,
 };
+test("host allow-list accepts the custom domain and rejects unknown hosts", async (t) => {
+  const server = createApp(services).listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => new Promise((done) => server.close(done)));
+  const { port } = server.address();
+
+  const statusFor = (host) =>
+    new Promise((resolve, reject) => {
+      const req = request(
+        { host: "127.0.0.1", port, path: "/health", headers: { host } },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+
+  for (const host of [
+    "moviesda.dpdns.org",
+    "moviesda.dpdns.org:443",
+    "moviefindera.vercel.app",
+    "localhost",
+    "127.0.0.1",
+  ]) {
+    assert.equal(await statusFor(host), 200, host);
+  }
+
+  for (const host of ["evil.example", "moviesda.dpdns.org.evil.example", ""]) {
+    assert.equal(await statusFor(host), 400, host);
+  }
+});
+
 test("robots and sitemap expose only the public pages", async (t) => {
   const previous = process.env.SITE_URL;
   process.env.SITE_URL = "https://aftershow.example/";
