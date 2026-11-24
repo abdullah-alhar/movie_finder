@@ -32,7 +32,7 @@ function normalizeHost(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
   try {
-    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname;
+    return new URL(raw.includes("://") ? raw : `https://${raw}`).hostname.replace(/\.$/, "");
   } catch {
     return raw.replace(/:\d+$/, "").replace(/\.$/, "");
   }
@@ -131,7 +131,7 @@ export function createApp(
   const origin = siteOrigin(process.env.SITE_URL || (
     process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   ));
-  const siteHost = origin && new URL(origin).hostname;
+  const siteHost = origin && normalizeHost(new URL(origin).hostname);
   const visits = new Map();
   let activeLookups = 0;
   let configAttempt, configFreshUntil = 0, lastConfigEpoch = -1;

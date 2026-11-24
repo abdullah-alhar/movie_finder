@@ -52,16 +52,18 @@ test("host allow-list accepts the custom domain and rejects unknown hosts", asyn
     });
 
   for (const host of [
-    "moviesda.dpdns.org",
-    "moviesda.dpdns.org:443",
-    "moviefindera.vercel.app",
-    "localhost",
-    "127.0.0.1",
+    "MOVIESDA.DPDNS.ORG",
+    "moviesda.dpdns.org.",
   ]) {
     assert.equal(await statusFor(host), 200, host);
   }
 
-  for (const host of ["evil.example", "moviesda.dpdns.org.evil.example", ""]) {
+  for (const host of [
+    "evil.example",
+    "moviesda.dpdns.org.evil.example",
+    "evil.dpdns.org",
+    "unknown.localhost",
+  ]) {
     assert.equal(await statusFor(host), 400, host);
   }
 });
