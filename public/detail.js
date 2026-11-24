@@ -149,7 +149,7 @@ export async function showDetail(main) {
     icon("play") +
     'Watch</a><a class="secondary" href="#downloads">Download</a><button class="secondary share">' +
     icon("share") +
-    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><div class="selection-top"><div class="season-control"></div><p class="selection-title" role="status"></p></div><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><h2>Downloads</h2><p class="download-selection muted"></p><ul></ul><div class="download-recovery" role="status"></div></section></div>';
+    'Share</button><a class="secondary trailer" target="_blank" rel="noopener noreferrer">Trailer</a></div></div></section><div class="media-hub"><section class="selection-picker" aria-label="Media selection" hidden><div class="selection-top"><div class="season-control"></div><p class="selection-title" role="status"></p></div><div class="selection-controls"></div></section><section class="media collection" id="watch"><h2>Watch movie</h2><div class="player-shell"><div class="player-top"><p class="episode-status" role="status" hidden></p></div><div class="video-wrap"><video controls playsinline preload="none" aria-label="Movie player"></video></div><div class="transport" aria-label="Playback controls"><button type="button" class="previous" hidden>Previous</button><button type="button" class="rewind">−10 s</button><button type="button" class="forward">+10 s</button><button type="button" class="next" hidden>Next</button><button type="button" class="expand" hidden>Fullscreen</button></div></div><p class="player-state notice" role="status"></p><div class="actions media-actions"></div></section><section class="downloads collection" id="downloads"><div class="downloads-header"><div><h2>Downloads</h2><p class="downloads-intro">Choose a quality that fits your device and connection.</p></div><span class="download-count" hidden></span></div><p class="download-selection muted"></p><ul aria-label="Available download versions"></ul><div class="download-recovery" role="status"></div></section></div>';
   const find = (sel) => main.querySelector(sel),
     video = find("video"),
     status = find(".player-state");
@@ -592,15 +592,35 @@ export async function showDetail(main) {
       for (const o of matches) {
         if (!/^\/download\/[\w.-]+$/.test(o.download || "")) continue;
         const li = document.createElement("li"),
-          name = document.createElement("span"),
-          link = document.createElement("a");
-        name.textContent = label(o);
+          details = document.createElement("div"),
+          quality = document.createElement("span"),
+          edition = document.createElement("span"),
+          size = document.createElement("span"),
+          link = document.createElement("a"),
+          rawQuality = String(o.label || ""),
+          qualityMatch = rawQuality.match(/\b(?:2160p|1440p|1080p|720p|480p|360p|4k|uhd|hd|sd)\b/i);
+        li.className = "download-option";
+        details.className = "download-option-details";
+        quality.className = "download-quality";
+        quality.textContent = qualityMatch?.[0] || (rawQuality.length > 22 ? "Other quality" : rawQuality || "Available quality");
+        edition.className = "download-edition";
+        edition.textContent = o.edition || (rawQuality.length > 22 ? rawQuality : "Original release");
+        size.className = "download-size";
+        size.textContent = o.size || "File size unavailable";
+        details.append(quality, edition, size);
         link.setAttribute("aria-label", ["Download", (series || multipart) && selectedLabel, label(o)].filter(Boolean).join(" · "));
         link.href = o.download;
-        link.className = "secondary";
-        link.textContent = "Download";
-        li.append(name, link);
+        link.className = "download-action";
+        link.innerHTML = `${icon("download")}<span>Download</span>`;
+        li.append(details, link);
         list.append(li);
+      }
+      const downloadCount = find(".download-count");
+      if (list.children.length) {
+        downloadCount.textContent = `${list.children.length} ${list.children.length === 1 ? "version" : "versions"}`;
+        downloadCount.hidden = false;
+      } else {
+        downloadCount.hidden = true;
       }
     } else {
       find(".video-big-play")?.classList.add("hidden");
