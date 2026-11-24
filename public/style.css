@@ -1711,36 +1711,6 @@ body {
 .download-action:hover { background: #c2d8fc; transform: translateY(-1px); box-shadow: 0 8px 22px rgba(87, 125, 189, .24); }
 .download-action:focus-visible { outline: 2px solid #d8e6ff; outline-offset: 3px; }
 .download-recovery { margin-top: 14px; }
-/* ─── Film detail page: editorial layout and quality cards ───────────────── */
-.back { width: fit-content; margin: 20px auto 28px; max-width: 1032px; }
-.detail-header { max-width: 1032px; grid-template-columns: 238px minmax(0, 1fr); gap: 40px; padding: 0 20px 46px; }
-.detail-cover { width: 100%; aspect-ratio: 2 / 3; border-radius: 18px; background: linear-gradient(155deg, #eab1ca, #829ce0 56%, #26385f); box-shadow: 0 16px 38px rgba(0, 0, 0, .2); }
-.detail-cover span { color: #fff; font: italic 600 30px/1.05 Georgia, serif; letter-spacing: -.035em; text-align: left; text-transform: none; }
-.detail-copy { gap: 14px; padding-top: 0; }
-.detail-copy .eyebrow { margin: 0; color: var(--accent); font-size: 11px; letter-spacing: .14em; }
-.detail-copy h1 { margin: -2px 0 0; font: 700 clamp(36px, 4vw, 52px)/1.05 Georgia, 'Times New Roman', serif; letter-spacing: -.04em; }
-.detail-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.detail-meta { display: contents; }
-.detail-chip { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 12px; border: 1px solid rgba(168, 199, 250, .08); border-radius: 999px; background: #1b2434; color: #eef3ff; font: 600 12px/1.3 'Inter', sans-serif; white-space: nowrap; }
-.detail-tags .rating { margin: 0; }
-.detail-tags .rating-badge { min-height: 27px; border-radius: 999px; padding: 4px 11px; }
-#overview { max-width: 760px; margin: 2px 0 0; font-size: 16px; line-height: 1.65; opacity: .9; }
-#cast { max-width: 770px; margin: -2px 0 0; font-size: 13px; line-height: 1.7; }
-.detail-copy .actions { gap: 10px; padding-top: 2px; }
-.detail-copy .actions .primary,
-.detail-copy .actions .secondary { min-height: 48px; padding: 0 20px; border-radius: 12px; }
-.detail-copy .actions .primary { background: var(--accent); color: #0c1422; }
-.media-hub { max-width: 1072px; padding: 0 20px; }
-.collection { margin-bottom: 54px; }
-.collection h2 { margin-bottom: 16px; font: 700 28px/1.2 Georgia, 'Times New Roman', serif; letter-spacing: -.025em; }
-#watch { scroll-margin-top: calc(var(--topbar) + 20px); }
-.player-shell { margin-bottom: 12px; border: 1px solid rgba(226, 235, 250, .09); border-radius: 18px; background: linear-gradient(125deg, #f0c69d 0%, #ad8bb0 47%, #28365e 100%); }
-.player-top { background: transparent; }
-.video-wrap { overflow: hidden; background: linear-gradient(125deg, #f0c69d 0%, #ad8bb0 47%, #28365e 100%); }
-.video-wrap video { position: relative; z-index: 1; object-fit: contain; background: transparent; }
-.video-wrap video:not([data-started]) { opacity: 0; }
-.video-big-play { z-index: 3; width: 84px; height: 84px; background: var(--accent); box-shadow: 0 10px 28px rgba(13, 18, 30, .25); }
-.transport { background: rgba(8, 11, 18, .86); }
 .downloads { padding: clamp(20px, 2.5vw, 30px); border-radius: 22px; border-color: rgba(168, 199, 250, .12); background: #0f1521; box-shadow: none; }
 .downloads-header { align-items: center; margin-bottom: 20px; }
 .downloads-header > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px 16px; }
@@ -1758,33 +1728,16 @@ body {
 .download-edition { overflow: hidden; color: var(--muted); font: 12px/1.35 'Inter', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
 .download-size { flex: none; color: var(--fg); font: 600 12px/1.35 'Inter', sans-serif; white-space: nowrap; }
 .download-size::before { display: none; }
-.download-size-meter { height: 4px; overflow: hidden; border-radius: 999px; background: #29354a; }
-.download-size-meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .download-action { width: 100%; min-width: 0; min-height: 44px; border: 0; border-radius: 12px; background: var(--accent); color: #101827; font: 700 13px/1 'Inter', sans-serif; box-shadow: none; }
 .download-action:hover { background: #c2d8fc; transform: translateY(-1px); box-shadow: none; }
 .download-action span { color: #101827; }
 .download-recovery { margin-top: 14px; }
-.detail-recommendations { max-width: 1072px; padding: 0 20px 44px; }
-.detail-recommendations .section-head { margin-bottom: 18px; }
-.detail-recommendations .section-title { font: 700 28px/1.2 Georgia, 'Times New Roman', serif; letter-spacing: -.025em; }
-.detail-recommendations .grid { display: flex; gap: 14px; overflow-x: auto; padding: 0 0 8px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-.detail-recommendations .card { flex: 0 0 clamp(126px, 13vw, 150px); scroll-snap-align: start; }
-.detail-recommendations .card-link { overflow: visible; border: 0; background: transparent; box-shadow: none; }
-.detail-recommendations .poster { border: 1px solid rgba(168, 199, 250, .16); border-radius: 13px; }
-.detail-recommendations .card-link h3 { padding: 9px 0 2px; font-size: 13px; }
-.detail-recommendations .card-link p { padding: 0 0 6px; font-size: 11.5px; }
+.downloads ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.downloads li.download-option { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 11px; min-width: 0; min-height: 158px; padding: 16px; border: 1px solid rgba(168, 199, 250, .12); border-radius: 16px; background: #192233; }
 @media (max-width: 760px) {
-  .detail-header { grid-template-columns: 170px minmax(0, 1fr); gap: 24px; }
   .downloads ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .detail-recommendations .card { flex-basis: 132px; }
 }
 @media (max-width: 560px) {
-  .back { margin: 12px 14px 18px; }
-  .detail-header { grid-template-columns: 1fr; gap: 20px; padding: 0 14px 32px; }
-  .detail-cover { width: 180px; max-width: 70%; justify-self: center; }
-  .detail-copy h1 { font-size: clamp(34px, 10vw, 44px); }
-  #overview { font-size: 15px; }
-  .media-hub { padding: 0 14px; }
   .downloads { padding: 18px 14px; border-radius: 18px; }
   .downloads-header { align-items: flex-start; }
   .downloads-header > div { display: block; }
@@ -1795,8 +1748,6 @@ body {
   .download-option-details { flex-wrap: wrap; gap: 2px 8px; }
   .download-edition { width: 100%; }
   .download-action { min-height: 42px; }
-  .detail-recommendations { padding: 0 14px 32px; }
-  .detail-recommendations .section-title { font-size: 25px; }
 }
 @media (max-width: 380px) {
   .downloads ul { grid-template-columns: 1fr; }

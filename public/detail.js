@@ -143,7 +143,9 @@ export async function showDetail(main) {
     esc(item.title) +
     '</span></div><div class="detail-copy"><p class="eyebrow">FILM DETAILS</p><h1>' +
     esc(item.title) +
-    '</h1><div class="detail-tags"><div class="detail-meta" id="facts" aria-label="Title metadata"></div><span id="release-quality" class="detail-chip" hidden></span><p class="rating"></p></div><p id="overview"></p><p class="muted" id="cast"></p><div class="actions"><a class="primary" href="#watch">' +
+    '</h1><p class="muted" id="facts">' +
+    esc([item.year, item.kind === "tv" ? "Series" : "Movie"].filter(Boolean).join(" · ")) +
+    '</p><p id="release-quality" class="muted"></p><p id="overview"></p><p class="muted" id="cast"></p><p class="rating"></p><div class="actions"><a class="primary" href="#watch">' +
     icon("play") +
     'Watch</a><a class="secondary" href="#downloads">Download</a><button class="secondary share">' +
     icon("share") +
@@ -151,16 +153,6 @@ export async function showDetail(main) {
   const find = (sel) => main.querySelector(sel),
     video = find("video"),
     status = find(".player-state");
-  function renderFacts(values) {
-    const chips = values.filter(Boolean).map((value) => {
-      const chip = document.createElement("span");
-      chip.className = "detail-chip";
-      chip.textContent = String(value);
-      return chip;
-    });
-    find("#facts").replaceChildren(...chips);
-  }
-  renderFacts([item.year, item.kind === "tv" ? "Series" : "Movie"]);
   function addSource(container) {
     if (!/^https:\/\//.test(item.sourceUrl || "") || container.querySelector(".source-link")) return;
     const link = document.createElement("a");
@@ -219,11 +211,13 @@ export async function showDetail(main) {
   async function metadata() {
     try {
       const data = await json(base + "/metadata");
-      renderFacts([
+      find("#facts").textContent = [
         item.year,
         ...(data.genres || []),
         data.runtime ? data.runtime + " min" : "",
-      ]);
+      ]
+        .filter(Boolean)
+        .join(" · ");
       find("#overview").textContent =
         data.overview || "Story information is unavailable for this title.";
       find("#cast").textContent = data.cast?.length
@@ -247,11 +241,8 @@ export async function showDetail(main) {
         find(".rating").innerHTML =
           `<span class="rating-badge"><span class="star">★</span> ${Number(data.rating).toFixed(1)} <span class="rating-source">${data.source || 'TMDB'}</span></span>`;
       }
-      if (data.recommendations?.length) {
-        const recommendations = section("More like this", data.recommendations);
-        recommendations.classList.add("detail-recommendations");
-        main.append(recommendations);
-      }
+      if (data.recommendations?.length)
+        main.append(section("More like this", data.recommendations));
     } catch {
       find("#overview").textContent = "Movie information could not be loaded. ";
       const retry = document.createElement("button");
@@ -346,7 +337,6 @@ export async function showDetail(main) {
   }
   const currentMedia = () => !!selectedOption && video.getAttribute("src") === selectedOption.watch;
   video.addEventListener("play", () => {
-    video.dataset.started = "true";
     if (currentMedia()) showEpisode("Loading");
     find(".player-quality-prompt")?.classList.add("hidden");
     find(".video-big-play")?.classList.add("hidden");
@@ -376,7 +366,6 @@ export async function showDetail(main) {
     status.textContent = "";
     video.pause();
     video.removeAttribute("src");
-    delete video.dataset.started;
     video.load();
   }
   function render() {
@@ -623,8 +612,6 @@ export async function showDetail(main) {
           details = document.createElement("div"),
           edition = document.createElement("span"),
           size = document.createElement("span"),
-          meter = document.createElement("div"),
-          meterFill = document.createElement("span"),
           link = document.createElement("a"),
           rawQuality = String(o.label || ""),
           qualityMatch = rawQuality.match(/\b(?:2160p|1440p|1080p|720p|480p|360p|4k|uhd|hd|sd)\b/i),
@@ -646,16 +633,11 @@ export async function showDetail(main) {
         size.className = "download-size";
         size.textContent = o.size || "File size unavailable";
         details.append(edition, size);
-        meter.className = "download-size-meter";
-        meter.setAttribute("aria-hidden", "true");
-        meterFill.style.width = optionSize != null && largestSize ? `${Math.max(8, optionSize / largestSize * 100)}%` : "0%";
-        meter.append(meterFill);
-        meter.hidden = optionSize == null || !largestSize;
         link.setAttribute("aria-label", ["Download", (series || multipart) && selectedLabel, label(o)].filter(Boolean).join(" · "));
         link.href = o.download;
         link.className = "download-action";
         link.innerHTML = `${icon("download")}<span>Download</span>`;
-        li.append(top, details, meter, link);
+        li.append(top, details, link);
         list.append(li);
       }
       const downloadCount = find(".download-count");
@@ -711,9 +693,9 @@ export async function showDetail(main) {
       const editions = [
         ...new Set(all.map((option) => option.edition).filter(Boolean)),
       ];
-      const releaseQuality = find("#release-quality");
-      releaseQuality.textContent = editions.join(" / ") || result.quality || "Unlisted";
-      releaseQuality.hidden = false;
+      find("#release-quality").textContent =
+        "Release quality · " +
+        (editions.join(" / ") || result.quality || "Unlisted");
       partial = Boolean(result.unavailable);
     } catch {
       clearTimeout(timer);
