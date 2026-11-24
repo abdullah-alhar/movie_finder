@@ -1,7 +1,9 @@
+// Vercel Web Analytics initialization
 window.va = window.va || function () {
   (window.vaq = window.vaq || []).push(arguments);
 };
 
+// Privacy-focused event filtering for Web Analytics
 window.va("beforeSend", (event) => {
   if (event.type !== "pageview") return null;
   const url = new URL(event.url, window.location.origin);
