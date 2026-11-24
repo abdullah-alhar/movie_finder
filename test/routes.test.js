@@ -31,7 +31,7 @@ const services = {
   trailer: async () => "rPqTIibDpq4",
   artwork: async () => null,
 };
-test("the viewing guide is discoverable and has a single canonical URL", async (t) => {
+test("robots and sitemap expose only the public pages", async (t) => {
   const previous = process.env.SITE_URL;
   process.env.SITE_URL = "https://aftershow.example/";
   const app = createApp(services);
@@ -42,31 +42,67 @@ test("the viewing guide is discoverable and has a single canonical URL", async (
   await once(server, "listening");
   t.after(() => new Promise((done) => server.close(done)));
   const base = "http://127.0.0.1:" + server.address().port;
-  const path = "/moviesda-isaidub-alternatives";
-  const canonical = "https://aftershow.example" + path;
-
-  const response = await fetch(base + path + "?ref=test");
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type"), /^text\/html/);
-  assert.equal(response.headers.get("x-robots-tag"), null);
-  const html = await response.text();
-  assert.ok(html.includes(`<link rel="canonical" href="${canonical}" />`));
-  assert.match(html, /<title>Moviesda &amp; Isaidub: Legal Alternatives \| AfterShow<\/title>/);
-  assert.match(html, /<h1>Legal alternatives to Moviesda and Isaidub<\/h1>/);
-  assert.match(html, /https:\/\/www\.justwatch\.com\/in/);
-  assert.ok((await (await fetch(base)).text()).includes(`href="${path}"`));
-
-  const duplicate = await fetch(base + path + "/", { redirect: "manual" });
-  assert.equal(duplicate.status, 301);
-  assert.equal(duplicate.headers.get("location"), path);
 
   const robots = await fetch(base + "/robots.txt");
   assert.equal(robots.status, 200);
-  assert.match(await robots.text(), /Sitemap: https:\/\/aftershow\.example\/sitemap\.xml/);
+  assert.match(robots.headers.get("content-type"), /^text\/plain/);
+  assert.match(await robots.text(), /^User-agent: \*\nDisallow:\n\nSitemap: https:\/\/aftershow\.example\/sitemap\.xml\n$/);
+
   const sitemap = await fetch(base + "/sitemap.xml");
   assert.equal(sitemap.status, 200);
   assert.match(sitemap.headers.get("content-type"), /^application\/xml/);
-  assert.ok((await sitemap.text()).includes(`<loc>${canonical}</loc>`));
+  const urls = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(([, url]) => url);
+  assert.deepEqual(urls, [
+    "https://aftershow.example/",
+    "https://aftershow.example/movies",
+    "https://aftershow.example/series",
+  ]);
+
+  const removed = await fetch(base + "/moviesda-isaidub-alternatives");
+  assert.equal(removed.status, 404);
+  assert.equal(removed.headers.get("x-robots-tag"), "noindex");
+});
+
+test("web analytics loads only on production public pages", async (t) => {
+  const saved = { env: process.env.VERCEL_ENV, path: process.env.ANALYTICS_SCRIPT_PATH };
+  process.env.VERCEL_ENV = "production";
+  process.env.ANALYTICS_SCRIPT_PATH = "/aftershow-insights/script.js";
+  const app = createApp(services);
+  process.env.VERCEL_ENV = "preview";
+  delete process.env.ANALYTICS_SCRIPT_PATH;
+  const local = createApp(services);
+  for (const [key, value] of Object.entries(saved)) {
+    const name = key === "env" ? "VERCEL_ENV" : "ANALYTICS_SCRIPT_PATH";
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+
+  const server = app.listen(0, "127.0.0.1");
+  const dev = local.listen(0, "127.0.0.1");
+  await Promise.all([once(server, "listening"), once(dev, "listening")]);
+  t.after(() => Promise.all([
+    new Promise((done) => server.close(done)),
+    new Promise((done) => dev.close(done)),
+  ]));
+  const base = "http://127.0.0.1:" + server.address().port;
+  const devBase = "http://127.0.0.1:" + dev.address().port;
+
+  for (const path of ["/", "/movies", "/series"]) {
+    const html = await (await fetch(base + path)).text();
+    assert.ok(html.includes('<script defer src="/analytics.js"></script>'), path);
+    assert.ok(html.includes('<script defer src="/aftershow-insights/script.js"></script>'), path);
+    assert.ok(!html.includes("<!-- web analytics -->"), path);
+  }
+  const notFound = await (await fetch(base + "/missing")).text();
+  assert.ok(!notFound.includes("/analytics.js"));
+  const devHtml = await (await fetch(devBase)).text();
+  assert.ok(!devHtml.includes("/analytics.js"));
+
+  const script = await fetch(base + "/analytics.js");
+  assert.equal(script.status, 200);
+  const code = await script.text();
+  assert.ok(code.includes("beforeSend"));
+  assert.ok(code.includes('"/movie/title"'));
 });
 
 test("missing pages render the branded 404 without changing API response types", async (t) => {

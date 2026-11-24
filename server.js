@@ -11,8 +11,8 @@ import adminRouter from "./admin.js";
 import { configEpoch, loadConfig } from './admin-store.js';
 const publicDir = fileURLToPath(new URL("public/", import.meta.url));
 const notFoundPage = fileURLToPath(new URL("public/404.html", import.meta.url));
-const guidePath = "/moviesda-isaidub-alternatives";
-const guideTemplate = readFileSync(new URL("./views/viewing-guide.html", import.meta.url), "utf8");
+const indexTemplate = readFileSync(new URL("./public/index.html", import.meta.url), "utf8");
+const publicPages = ["/", "/movies", "/series"];
 
 function siteOrigin(value) {
   if (!value || !/^https:\/\/[a-z0-9.-]+\/?$/i.test(value)) return null;
@@ -73,14 +73,17 @@ export function createApp(
 ) {
   const app = express();
   app.disable("x-powered-by");
+  const analyticsPath = process.env.ANALYTICS_SCRIPT_PATH || "/_vercel/insights/script.js";
+  const analyticsTags = process.env.VERCEL_ENV === "production" &&
+    /^\/(?:[a-z0-9_-]+\/)+script\.js$/i.test(analyticsPath)
+    ? `<script defer src="/analytics.js"></script>\n    <script defer src="${analyticsPath}"></script>`
+    : "";
+  const withAnalytics = (html) => html.replace("<!-- web analytics -->", analyticsTags);
+  const index = withAnalytics(indexTemplate);
   const origin = siteOrigin(process.env.SITE_URL || (
     process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
   ));
-  const canonical = origin && `${origin}${guidePath}`;
-  const canonicalHost = origin && new URL(origin).hostname;
-  const guide = guideTemplate.replace("<!-- canonical -->", canonical
-    ? `<link rel="canonical" href="${canonical}" />`
-    : "");
+  const siteHost = origin && new URL(origin).hostname;
   const visits = new Map();
   let activeLookups = 0;
   let configAttempt, configFreshUntil = 0, lastConfigEpoch = -1;
@@ -114,7 +117,7 @@ export function createApp(
     if (process.env.NODE_ENV === "production")
       res.set("Strict-Transport-Security", "max-age=31536000");
     const host = (req.hostname || "").toLowerCase();
-    if (!trusted.has(host) && host !== canonicalHost && !host.endsWith(".vercel.app"))
+    if (!trusted.has(host) && host !== siteHost && !host.endsWith(".vercel.app"))
       return res.sendStatus(400);
     if (req.originalUrl.length > 6144) return res.sendStatus(414);
     next();
@@ -128,20 +131,17 @@ export function createApp(
     return res.type("html").sendFile(notFoundPage);
   };
   app.get("/404.html", sendNotFound);
-  app.get(guidePath, (req, res) => {
-    if (req.path !== guidePath) return res.redirect(301, guidePath);
-    res.type("html").send(guide);
-  });
   app.get("/robots.txt", (req, res) => {
     const sitemap = origin ? `\nSitemap: ${origin}/sitemap.xml\n` : "";
     res.type("text/plain").send(`User-agent: *\nDisallow:\n${sitemap}`);
   });
   app.get("/sitemap.xml", (req, res) => {
-    if (!canonical) return sendNotFound(req, res);
+    if (!origin) return sendNotFound(req, res);
     res.type("application/xml").send(
       `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-      `  <url><loc>${canonical}</loc></url>\n</urlset>\n`,
+      publicPages.map(path => `  <url><loc>${origin}${path}</loc></url>`).join("\n") +
+      `\n</urlset>\n`,
     );
   });
   app.use(
@@ -202,8 +202,7 @@ export function createApp(
   // Admin routes (before static/shell so /admin/* isn't caught by static)
   app.use("/admin", adminRouter);
 
-  const shell = (req, res) =>
-    res.sendFile(fileURLToPath(new URL("public/index.html", import.meta.url)));
+  const shell = (req, res) => res.type("html").send(index);
   app.get(["/", "/movies", "/series", "/search"], shell);
   app.param("token", (req, res, next, token) => {
     try {

@@ -28,7 +28,7 @@ Copy `.env.example` to `.env` if you want to customize the port or add keys. Nod
 | OMDB_API_KEY | IMDb rating and vote count from OMDb |
 | MOVIE_SECRET | Persistent signing secret for movie and media links. Production requires at least 32 characters |
 | TRUSTED_HOSTS | Comma-separated list of allowed incoming hostnames |
-| SITE_URL | Public HTTPS origin for the guide’s canonical URL and sitemap; defaults to the Vercel production hostname when available |
+| SITE_URL | Public HTTPS origin for the sitemap and host check; defaults to the Vercel production hostname when available |
 | APPROVED_ORIGINS | Comma-separated extra HTTPS origins for custom links (optional) |
 
 Local development uses a temporary signing key. Set `MOVIE_SECRET` to keep links valid across restarts.
@@ -43,9 +43,15 @@ The provider catalogue URLs (isaidub, moviezda) are stored in the database and m
 
 The app stores no catalogue or playback history in the database. Opening a title checks the provider for current seasons, episodes and qualities.
 
-### Submit the viewing guide to Google
+### Search engines
 
-Set `SITE_URL` to your preferred public HTTPS origin (for example, `https://aftershow.example`) and deploy. Verify that `/robots.txt` points to `/sitemap.xml` and that the sitemap lists `/moviesda-isaidub-alternatives`. In Google Search Console, submit the sitemap and request indexing for the guide using URL Inspection. In Performance, filter by the guide URL and track the exact queries `moviesda` and `isaidub` separately. Neither indexing nor ranking for these third-party names is guaranteed.
+Set `SITE_URL` to your preferred public HTTPS origin (for example, `https://aftershow.example`) and deploy. `/robots.txt` allows crawling and points to `/sitemap.xml`, which lists the homepage, Movies, and Series. In Google Search Console, submit the sitemap once and use URL Inspection to check individual titles.
+
+### Enable Vercel Web Analytics
+
+In the Vercel project, open **Analytics**, click **Enable**, and choose **HTML** in the setup dropdown. If Vercel shows a project-specific script URL, set `ANALYTICS_SCRIPT_PATH` in the Production environment to the path shown (such as `/<project-path>/script.js`). The default is `/_vercel/insights/script.js`. Redeploy to production, visit the homepage without a content blocker, and verify that the browser loads the script and sends a successful `/view` request. Check for the visits in the Analytics dashboard.
+
+Tracking runs on public app pages in Vercel Production only, not on the admin or error pages. Page URLs are reported without query strings or fragments, and movie identifiers are replaced with a shared path.
 
 ## Tests
 
