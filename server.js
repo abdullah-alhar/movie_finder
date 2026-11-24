@@ -73,6 +73,7 @@ export function createApp(
 ) {
   const app = express();
   app.disable("x-powered-by");
+  // Vercel Web Analytics script path (auto-configured by Vercel platform)
   const analyticsPath = process.env.ANALYTICS_SCRIPT_PATH || "/_vercel/insights/script.js";
   const analyticsTags = process.env.VERCEL_ENV === "production" &&
     /^\/(?:[a-z0-9_-]+\/)+script\.js$/i.test(analyticsPath)
