@@ -143,9 +143,7 @@ export async function showDetail(main) {
     esc(item.title) +
     '</span></div><div class="detail-copy"><p class="eyebrow">FILM DETAILS</p><h1>' +
     esc(item.title) +
-    '</h1><p class="muted" id="facts">' +
-    esc([item.year, item.kind === "tv" ? "Series" : "Movie"].filter(Boolean).join(" · ")) +
-    '</p><p id="release-quality" class="muted"></p><p id="overview"></p><p class="muted" id="cast"></p><p class="rating"></p><div class="actions"><a class="primary" href="#watch">' +
+    '</h1><div class="detail-tags"><div class="detail-meta" id="facts" aria-label="Title metadata"></div><span id="release-quality" class="detail-chip" hidden></span><p class="rating"></p></div><p id="overview"></p><p class="muted" id="cast"></p><div class="actions"><a class="primary" href="#watch">' +
     icon("play") +
     'Watch</a><a class="secondary" href="#downloads">Download</a><button class="secondary share">' +
     icon("share") +
@@ -153,6 +151,16 @@ export async function showDetail(main) {
   const find = (sel) => main.querySelector(sel),
     video = find("video"),
     status = find(".player-state");
+  function renderFacts(values) {
+    const chips = values.filter(Boolean).map((value) => {
+      const chip = document.createElement("span");
+      chip.className = "detail-chip";
+      chip.textContent = String(value);
+      return chip;
+    });
+    find("#facts").replaceChildren(...chips);
+  }
+  renderFacts([item.year, item.kind === "tv" ? "Series" : "Movie"]);
   function addSource(container) {
     if (!/^https:\/\//.test(item.sourceUrl || "") || container.querySelector(".source-link")) return;
     const link = document.createElement("a");
@@ -211,13 +219,11 @@ export async function showDetail(main) {
   async function metadata() {
     try {
       const data = await json(base + "/metadata");
-      find("#facts").textContent = [
+      renderFacts([
         item.year,
         ...(data.genres || []),
         data.runtime ? data.runtime + " min" : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
+      ]);
       find("#overview").textContent =
         data.overview || "Story information is unavailable for this title.";
       find("#cast").textContent = data.cast?.length
@@ -241,8 +247,11 @@ export async function showDetail(main) {
         find(".rating").innerHTML =
           `<span class="rating-badge"><span class="star">★</span> ${Number(data.rating).toFixed(1)} <span class="rating-source">${data.source || 'TMDB'}</span></span>`;
       }
-      if (data.recommendations?.length)
-        main.append(section("More like this", data.recommendations));
+      if (data.recommendations?.length) {
+        const recommendations = section("More like this", data.recommendations);
+        recommendations.classList.add("detail-recommendations");
+        main.append(recommendations);
+      }
     } catch {
       find("#overview").textContent = "Movie information could not be loaded. ";
       const retry = document.createElement("button");
@@ -337,6 +346,7 @@ export async function showDetail(main) {
   }
   const currentMedia = () => !!selectedOption && video.getAttribute("src") === selectedOption.watch;
   video.addEventListener("play", () => {
+    video.dataset.started = "true";
     if (currentMedia()) showEpisode("Loading");
     find(".player-quality-prompt")?.classList.add("hidden");
     find(".video-big-play")?.classList.add("hidden");
@@ -366,6 +376,7 @@ export async function showDetail(main) {
     status.textContent = "";
     video.pause();
     video.removeAttribute("src");
+    delete video.dataset.started;
     video.load();
   }
   function render() {
@@ -589,30 +600,62 @@ export async function showDetail(main) {
         e.preventDefault();
         showQualityPicker();
       };
+      const resolutionValue = (option) => Number(
+        String(option.resolution || option.label || "").match(/2160|1440|1080|720|540|480|360|240/)?.[0] || 0
+      );
+      const sizeValue = (option) => {
+        const match = String(option.size || "").match(/([\d.]+)\s*(GB|MB|KB)/i);
+        if (!match) return null;
+        const amount = Number(match[1]);
+        return match[2].toLowerCase() === "gb" ? amount * 1024 : match[2].toLowerCase() === "kb" ? amount / 1024 : amount;
+      };
+      const resolutions = matches.map(resolutionValue).filter(Boolean);
+      const sizes = matches.map(sizeValue).filter((value) => value != null);
+      const bestResolution = resolutions.length ? Math.max(...resolutions) : 0;
+      const largestSize = sizes.length ? Math.max(...sizes) : 0;
+      const smallestSize = sizes.length ? Math.min(...sizes) : 0;
       for (const o of matches) {
         if (!/^\/download\/[\w.-]+$/.test(o.download || "")) continue;
         const li = document.createElement("li"),
-          details = document.createElement("div"),
+          top = document.createElement("div"),
           quality = document.createElement("span"),
+          highlight = document.createElement("span"),
+          details = document.createElement("div"),
           edition = document.createElement("span"),
           size = document.createElement("span"),
+          meter = document.createElement("div"),
+          meterFill = document.createElement("span"),
           link = document.createElement("a"),
           rawQuality = String(o.label || ""),
-          qualityMatch = rawQuality.match(/\b(?:2160p|1440p|1080p|720p|480p|360p|4k|uhd|hd|sd)\b/i);
+          qualityMatch = rawQuality.match(/\b(?:2160p|1440p|1080p|720p|480p|360p|4k|uhd|hd|sd)\b/i),
+          optionSize = sizeValue(o),
+          optionResolution = resolutionValue(o);
         li.className = "download-option";
-        details.className = "download-option-details";
+        top.className = "download-option-top";
         quality.className = "download-quality";
         quality.textContent = qualityMatch?.[0] || (rawQuality.length > 22 ? "Other quality" : rawQuality || "Available quality");
+        highlight.className = "download-highlight";
+        if (optionResolution && optionResolution === bestResolution) highlight.textContent = "Best quality";
+        else if (!bestResolution && optionSize != null && optionSize === largestSize) highlight.textContent = "Best quality";
+        else if (optionSize != null && optionSize === smallestSize && smallestSize !== largestSize) highlight.textContent = "Smallest";
+        highlight.hidden = !highlight.textContent;
+        top.append(quality, highlight);
+        details.className = "download-option-details";
         edition.className = "download-edition";
         edition.textContent = o.edition || (rawQuality.length > 22 ? rawQuality : "Original release");
         size.className = "download-size";
         size.textContent = o.size || "File size unavailable";
-        details.append(quality, edition, size);
+        details.append(edition, size);
+        meter.className = "download-size-meter";
+        meter.setAttribute("aria-hidden", "true");
+        meterFill.style.width = optionSize != null && largestSize ? `${Math.max(8, optionSize / largestSize * 100)}%` : "0%";
+        meter.append(meterFill);
+        meter.hidden = optionSize == null || !largestSize;
         link.setAttribute("aria-label", ["Download", (series || multipart) && selectedLabel, label(o)].filter(Boolean).join(" · "));
         link.href = o.download;
         link.className = "download-action";
         link.innerHTML = `${icon("download")}<span>Download</span>`;
-        li.append(details, link);
+        li.append(top, details, meter, link);
         list.append(li);
       }
       const downloadCount = find(".download-count");
@@ -668,9 +711,9 @@ export async function showDetail(main) {
       const editions = [
         ...new Set(all.map((option) => option.edition).filter(Boolean)),
       ];
-      find("#release-quality").textContent =
-        "Release quality · " +
-        (editions.join(" / ") || result.quality || "Unlisted");
+      const releaseQuality = find("#release-quality");
+      releaseQuality.textContent = editions.join(" / ") || result.quality || "Unlisted";
+      releaseQuality.hidden = false;
       partial = Boolean(result.unavailable);
     } catch {
       clearTimeout(timer);
