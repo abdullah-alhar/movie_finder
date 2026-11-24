@@ -9,7 +9,7 @@
     <meta name="google-site-verification" content="IXn12EwJDgcVhcnxkgmrmHP-3b-oNAnIM1mbk1Fu1i4" />
     <script>
       try {
-        var savedTheme = localStorage.getItem('aftershow-theme') ?? localStorage.getItem('afterframe-theme');
+        var savedTheme = localStorage.getItem('aftershow-theme');
         if (savedTheme === 'light' || savedTheme === 'dark') {
           document.documentElement.dataset.theme = savedTheme;
           if (savedTheme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f5f7fa';

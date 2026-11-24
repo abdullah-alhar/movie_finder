@@ -32,7 +32,7 @@ function applyTheme(value) {
 }
 
 let savedTheme;
-try { savedTheme = localStorage.getItem('aftershow-theme') ?? localStorage.getItem('afterframe-theme'); } catch {}
+try { savedTheme = localStorage.getItem('aftershow-theme'); } catch {}
 applyTheme(savedTheme === 'light' ? 'light' : 'dark');
 $('#theme')?.addEventListener('click', () => {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';

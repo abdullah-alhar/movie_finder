@@ -8,7 +8,7 @@
     <title>Page not found · AfterShow</title>
     <script>
       try {
-        var savedTheme = localStorage.getItem('aftershow-theme') ?? localStorage.getItem('afterframe-theme');
+        var savedTheme = localStorage.getItem('aftershow-theme');
         if (savedTheme === 'light' || savedTheme === 'dark') {
           document.documentElement.dataset.theme = savedTheme;
           var themeMeta = document.querySelector('meta[name="theme-color"]');
