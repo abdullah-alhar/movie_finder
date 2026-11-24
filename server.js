@@ -74,7 +74,25 @@ export function createApp(
   const app = express();
   app.disable("x-powered-by");
   // Vercel Web Analytics script path (auto-configured by Vercel platform)
-  const analyticsPath = process.env.ANALYTICS_SCRIPT_PATH || "/_vercel/insights/script.js";
+  // Parse VERCEL_OBSERVABILITY_CLIENT_CONFIG if available, otherwise use custom path or fallback
+  let analyticsPath = "/_vercel/insights/script.js";
+  try {
+    const config = process.env.VERCEL_OBSERVABILITY_CLIENT_CONFIG;
+    if (config) {
+      const parsed = JSON.parse(config);
+      if (parsed?.analytics?.scriptSrc) {
+        // Ensure the path has a leading slash to avoid relative path issues
+        analyticsPath = parsed.analytics.scriptSrc.replace(/^(?!https?:\/\/|\/)/, "/");
+      }
+    } else if (process.env.ANALYTICS_SCRIPT_PATH) {
+      analyticsPath = process.env.ANALYTICS_SCRIPT_PATH;
+    }
+  } catch (err) {
+    // If parsing fails, use the custom path or fallback
+    if (process.env.ANALYTICS_SCRIPT_PATH) {
+      analyticsPath = process.env.ANALYTICS_SCRIPT_PATH;
+    }
+  }
   const analyticsTags = process.env.VERCEL_ENV === "production" &&
     /^\/(?:[a-z0-9_-]+\/)+script\.js$/i.test(analyticsPath)
     ? `<script defer src="/analytics.js"></script>\n    <script defer src="${analyticsPath}"></script>`
