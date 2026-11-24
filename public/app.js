@@ -349,41 +349,94 @@ async function loadPage() {
       else if (params.get('filter') === 'dubbed' || source === 'isaidub') title = 'Dubbed Movies';
       else if (params.get('filter') === 'series' || params.get('category') === 'series') title = 'Web Series';
 
-      const sec   = section(title, data.items, { count: data.total });
-      // Stagger-animate cards
+      const sec = section(title, data.items, { count: data.total });
+      const grid = sec.querySelector('.grid');
+      grid.id = 'catalogue-grid';
+
       sec.querySelectorAll('.card').forEach((c, i) => {
         c.style.animationDelay = `${Math.min(i * 0.04, 0.5)}s`;
         c.classList.add('card-enter');
       });
       main.append(sec);
 
-      // Pagination
-      if (data.pages > 1) {
-        const pag   = document.createElement('div');
-        pag.className = 'section';
-        const inner = document.createElement('div');
-        inner.className = 'pagination';
+      let currentPage = page;
+      let currentScan = scan;
+      let currentData = data;
+      const batchSize = 45;
+      const pendingItems = [];
+      const seenItems = new Set(data.items.map(item => item.url || `${item.title}:${item.year}`));
+      const loadMoreSection = document.createElement('div');
+      loadMoreSection.className = 'section load-more-section';
+      const loadMoreButton = document.createElement('button');
+      loadMoreButton.type = 'button';
+      loadMoreButton.className = 'secondary load-more-button';
+      loadMoreButton.textContent = 'Load more';
+      loadMoreButton.setAttribute('aria-controls', grid.id);
+      const loadMoreStatus = document.createElement('p');
+      loadMoreStatus.className = 'load-more-status';
+      loadMoreStatus.setAttribute('aria-live', 'polite');
+      loadMoreSection.append(loadMoreButton, loadMoreStatus);
 
-        const prev = document.createElement('button');
-        prev.innerHTML = icon('left');
-        prev.disabled  = page <= 1;
-        prev.setAttribute('aria-label', 'Previous page');
-        prev.onclick   = () => goPage(page - 1);
+      const hasMore = () => {
+        const hasAnotherPage = Number.isFinite(Number(currentData.pages)) && currentPage < Number(currentData.pages);
+        const canScanMore = Boolean(currentData.more) && (!q || currentScan < 42);
+        return pendingItems.length > 0 || hasAnotherPage || canScanMore;
+      };
 
-        const info = document.createElement('span');
-        info.className   = 'page-info';
-        info.textContent = `Page ${page} of ${data.pages}`;
+      loadMoreButton.hidden = !hasMore();
+      loadMoreButton.onclick = async () => {
+        if (loadMoreButton.disabled) return;
 
-        const next = document.createElement('button');
-        next.innerHTML = icon('right');
-        next.disabled  = page >= data.pages;
-        next.setAttribute('aria-label', 'Next page');
-        next.onclick   = () => goPage(page + 1);
+        loadMoreButton.disabled = true;
+        loadMoreButton.textContent = 'Loading…';
+        loadMoreStatus.textContent = '';
 
-        inner.append(prev, info, next);
-        pag.append(inner);
-        main.append(pag);
-      }
+        try {
+          let attempts = 0;
+          while (pendingItems.length < batchSize && hasMore() && attempts < 6) {
+            let nextPage = currentPage + 1;
+            let nextScan = currentScan;
+            if (q && Number.isFinite(Number(currentData.pages)) && nextPage > Number(currentData.pages) && currentData.more && currentScan < 42) {
+              nextPage = 1;
+              nextScan = Math.min(42, currentScan + 1);
+            }
+
+            const nextData = await json('/api/catalogue?' + new URLSearchParams({
+              q, source, page: String(nextPage), scan: String(nextScan),
+              sort, category: isSeries ? 'series' : '',
+            }));
+            currentPage = nextPage;
+            currentScan = nextScan;
+            currentData = nextData;
+            for (const item of nextData.items || []) {
+              const key = item.url || `${item.title}:${item.year}`;
+              if (seenItems.has(key)) continue;
+              seenItems.add(key);
+              pendingItems.push(item);
+            }
+            attempts += 1;
+          }
+
+          const newItems = pendingItems.splice(0, batchSize);
+          newItems.forEach((item, i) => {
+            const movieCard = card(item, grid.children.length + i);
+            movieCard.classList.add('card-enter');
+            movieCard.style.animationDelay = `${Math.min(i * 0.04, 0.5)}s`;
+            grid.append(movieCard);
+          });
+          loadMoreButton.textContent = 'Load more';
+          loadMoreStatus.textContent = newItems.length
+            ? `${grid.children.length} titles shown`
+            : 'No new titles in this batch.';
+        } catch {
+          loadMoreButton.textContent = 'Try again';
+          loadMoreStatus.textContent = 'Could not load more titles.';
+        } finally {
+          loadMoreButton.disabled = false;
+          loadMoreButton.hidden = !hasMore();
+        }
+      };
+      main.append(loadMoreSection);
     } else {
       const empty = document.createElement('div');
       empty.className = 'section';
@@ -401,12 +454,6 @@ async function loadPage() {
     errSec.innerHTML = `<div class="empty"><h2>Something went wrong</h2><p>Could not load the catalogue. Please try again.</p><br><button class="secondary" onclick="location.reload()">Retry</button></div>`;
     main.append(errSec);
   }
-}
-
-function goPage(p) {
-  const u = new URLSearchParams(location.search);
-  u.set('page', String(p));
-  location.href = location.pathname + '?' + u;
 }
 
 loadPage();
