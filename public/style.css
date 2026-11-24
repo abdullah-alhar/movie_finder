@@ -1534,7 +1534,7 @@ video-player {
 }
 
 /* ─── AfterShow · modern cinema refresh ─────────────────────────────────── */
-:root {
+:root:not([data-theme="light"]) {
   --bg: #080b12;
   --surface: #111722;
   --surface2: #171f2c;
@@ -1751,4 +1751,35 @@ body {
 }
 @media (max-width: 380px) {
   .downloads ul { grid-template-columns: 1fr; }
+}
+
+[data-theme="light"] body {
+  background: radial-gradient(ellipse at 50% -20%, rgba(36, 79, 139, .08), transparent 52%), var(--bg);
+}
+[data-theme="light"] .topbar { border-color: var(--border); }
+[data-theme="light"] .site-tab[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+[data-theme="light"] .search-form { background: var(--surface2); }
+[data-theme="light"] .poster {
+  background: var(--surface2);
+  box-shadow: 0 8px 22px rgba(19, 39, 68, .09);
+}
+[data-theme="light"] .downloads {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .downloads li.download-option {
+  border-color: var(--border);
+  background: var(--surface2);
+}
+[data-theme="light"] .downloads li.download-option:hover { background: var(--surface3); }
+[data-theme="light"] .download-count {
+  border-color: var(--border);
+  color: var(--accent);
+}
+[data-theme="light"] .download-highlight {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
 }
