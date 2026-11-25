@@ -137,8 +137,9 @@ export function createApp(
   let configAttempt, configFreshUntil = 0, lastConfigEpoch = -1;
   function ensureOrigins() {
     const epoch = configEpoch();
-    if (!process.env.EXPRESS_DATABASE_URL ||
-        (epoch === lastConfigEpoch && Date.now() < configFreshUntil)) return;
+    if (!process.env.EXPRESS_DATABASE_URL) return;
+    const warm = Object.keys(origins).length > 0;
+    if (epoch === lastConfigEpoch && Date.now() < configFreshUntil) return;
     if (!configAttempt) {
       lastConfigEpoch = epoch;
       configAttempt = loadConfig().then(config => {
@@ -149,8 +150,13 @@ export function createApp(
         console.warn("[origins] Delayed init error:", err.message);
       }).finally(() => { configAttempt = undefined; });
     }
-    return configAttempt;
+    // Once origins are known, refresh the config in the background so catalogue
+    // requests never wait on the database.
+    return warm ? undefined : configAttempt;
   }
+  // Warm the config as soon as the app starts instead of on the first request.
+  ensureOrigins();
+
 
   app.use((req, res, next) => {
     res.set({

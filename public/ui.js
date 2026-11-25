@@ -66,6 +66,43 @@ export function skeletonGrid(count = 20) {
   return wrapper;
 }
 
+/** Render the featured-hero placeholder shown while the catalogue loads */
+export function skeletonHero() {
+  const wrap = document.createElement('div');
+  wrap.className = 'section hero-section-wrap skeleton-hero';
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.innerHTML = `
+    <div class="hero-carousel">
+      <div class="hero-slides-track">
+        <div class="hero-slide active">
+          <div class="hero-bg-holder">
+            <div class="skeleton-hero-bg"></div>
+            <div class="hero-gradient-overlay"></div>
+          </div>
+          <div class="hero-content">
+            <div class="hero-badges">
+              <span class="skeleton-block skeleton-pill"></span>
+              <span class="skeleton-block skeleton-pill short"></span>
+            </div>
+            <div class="skeleton-block skeleton-hero-title"></div>
+            <div class="skeleton-block skeleton-hero-title short"></div>
+            <div class="hero-meta">
+              <span class="skeleton-block skeleton-meta"></span>
+              <span class="skeleton-block skeleton-meta short"></span>
+            </div>
+            <div class="skeleton-block skeleton-desc"></div>
+            <div class="skeleton-block skeleton-desc short"></div>
+            <div class="hero-actions">
+              <span class="skeleton-block skeleton-btn"></span>
+              <span class="skeleton-block skeleton-btn small"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  return wrap;
+}
+
 export function card(item, index = 6) {
   const node = document.createElement('article');
   node.className = 'card';

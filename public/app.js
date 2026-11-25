@@ -1,4 +1,4 @@
-import { $, icon, esc, movieUrl, card, section, choice, json, skeletonGrid, toast } from './ui.js';
+import { $, icon, esc, movieUrl, card, section, choice, json, skeletonGrid, skeletonHero, toast } from './ui.js';
 import { showDetail } from './detail.js';
 import { initPlayer, renderContinueWatching } from './player.js';
 
@@ -284,6 +284,7 @@ async function loadPage() {
   }
 
   // Show skeleton while loading
+  if (isDiscover) main.append(skeletonHero());
   const skeletonSection = document.createElement('div');
   skeletonSection.className = 'section';
   skeletonSection.append(skeletonGrid(20));
@@ -349,41 +350,114 @@ async function loadPage() {
       else if (params.get('filter') === 'dubbed' || source === 'isaidub') title = 'Dubbed Movies';
       else if (params.get('filter') === 'series' || params.get('category') === 'series') title = 'Web Series';
 
-      const sec   = section(title, data.items, { count: data.total });
-      // Stagger-animate cards
+      const sec = section(title, data.items);
+      const grid = sec.querySelector('.grid');
+      grid.id = 'catalogue-grid';
+
       sec.querySelectorAll('.card').forEach((c, i) => {
         c.style.animationDelay = `${Math.min(i * 0.04, 0.5)}s`;
         c.classList.add('card-enter');
       });
       main.append(sec);
 
-      // Pagination
-      if (data.pages > 1) {
-        const pag   = document.createElement('div');
-        pag.className = 'section';
-        const inner = document.createElement('div');
-        inner.className = 'pagination';
+      let currentPage = page;
+      let currentScan = scan;
+      let currentData = data;
+      const batchSize = 45;
+      const pendingItems = [];
+      const seenItems = new Set(data.items.map(item => item.url || `${item.title}:${item.year}`));
+      const loadMoreSection = document.createElement('div');
+      loadMoreSection.className = 'section load-more-section';
+      const loadMoreButton = document.createElement('button');
+      loadMoreButton.type = 'button';
+      loadMoreButton.className = 'secondary load-more-button';
+      loadMoreButton.textContent = 'Load more';
+      loadMoreButton.setAttribute('aria-controls', grid.id);
+      loadMoreSection.append(loadMoreButton);
 
-        const prev = document.createElement('button');
-        prev.innerHTML = icon('left');
-        prev.disabled  = page <= 1;
-        prev.setAttribute('aria-label', 'Previous page');
-        prev.onclick   = () => goPage(page - 1);
+      const hasMore = () => {
+        const hasAnotherPage = Number.isFinite(Number(currentData.pages)) && currentPage < Number(currentData.pages);
+        const canScanMore = Boolean(currentData.more) && (!q || currentScan < 42);
+        return pendingItems.length > 0 || hasAnotherPage || canScanMore;
+      };
 
-        const info = document.createElement('span');
-        info.className   = 'page-info';
-        info.textContent = `Page ${page} of ${data.pages}`;
+      const fetchPage = ({ page: nextPage, scan: nextScan }) =>
+        json('/api/catalogue?' + new URLSearchParams({
+          q, source, page: String(nextPage), scan: String(nextScan),
+          sort, category: isSeries ? 'series' : '',
+        }));
 
-        const next = document.createElement('button');
-        next.innerHTML = icon('right');
-        next.disabled  = page >= data.pages;
-        next.setAttribute('aria-label', 'Next page');
-        next.onclick   = () => goPage(page + 1);
+      // Build the next few page cursors so they can be fetched in parallel.
+      const nextCursors = (limit) => {
+        const cursors = [];
+        let cursor = { page: currentPage, scan: currentScan };
+        const pages = Number(currentData.pages);
+        const hasPages = Number.isFinite(pages);
+        while (cursors.length < limit) {
+          let nextPage = cursor.page + 1;
+          let nextScan = cursor.scan;
+          if (q && hasPages && nextPage > pages && currentData.more && cursor.scan < 42) {
+            nextPage = 1;
+            nextScan = Math.min(42, cursor.scan + 1);
+          }
+          const withinPages = hasPages && nextPage <= pages;
+          const canScan = Boolean(currentData.more) && (!q || nextScan < 42);
+          if (!withinPages && !canScan) break;
+          cursor = { page: nextPage, scan: nextScan };
+          cursors.push(cursor);
+        }
+        return cursors;
+      };
 
-        inner.append(prev, info, next);
-        pag.append(inner);
-        main.append(pag);
-      }
+      loadMoreButton.hidden = !hasMore();
+      loadMoreButton.onclick = async () => {
+        if (loadMoreButton.disabled) return;
+
+        loadMoreButton.disabled = true;
+        loadMoreButton.textContent = 'Loading…';
+
+        try {
+          let attempts = 0;
+          while (pendingItems.length < batchSize && hasMore() && attempts < 3) {
+            const cursors = nextCursors(3);
+            if (!cursors.length) break;
+
+            const results = await Promise.allSettled(cursors.map(fetchPage));
+            let progressed = false;
+            results.forEach((result, i) => {
+              if (result.status !== 'fulfilled') return;
+              const nextData = result.value;
+              currentPage = cursors[i].page;
+              currentScan = cursors[i].scan;
+              currentData = nextData;
+              progressed = true;
+              for (const item of nextData.items || []) {
+                const key = item.url || `${item.title}:${item.year}`;
+                if (seenItems.has(key)) continue;
+                seenItems.add(key);
+                pendingItems.push(item);
+              }
+            });
+            if (!progressed) break;
+            attempts += 1;
+          }
+
+          const newItems = pendingItems.splice(0, batchSize);
+          newItems.forEach((item, i) => {
+            const movieCard = card(item, grid.children.length + i);
+            movieCard.classList.add('card-enter');
+            movieCard.style.animationDelay = `${Math.min(i * 0.04, 0.5)}s`;
+            grid.append(movieCard);
+          });
+          loadMoreButton.textContent = 'Load more';
+        } catch {
+          loadMoreButton.textContent = 'Try again';
+        } finally {
+          loadMoreButton.disabled = false;
+          loadMoreButton.hidden = !hasMore();
+        }
+      };
+      main.append(loadMoreSection);
     } else {
       const empty = document.createElement('div');
       empty.className = 'section';

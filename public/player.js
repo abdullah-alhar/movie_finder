@@ -316,8 +316,7 @@ export function renderContinueWatching(container) {
   const head = document.createElement('div');
   head.className = 'section-head';
   head.innerHTML = `
-    <h2 class="section-title">Continue Watching</h2>
-    <span class="section-count">${items.length} title${items.length !== 1 ? 's' : ''}</span>`;
+    <h2 class="section-title">Continue Watching</h2>`;
   section.append(head);
 
   const row = document.createElement('div');

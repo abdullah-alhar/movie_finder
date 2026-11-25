@@ -227,6 +227,10 @@ html { scroll-padding-top: calc(var(--topbar) + 16px); }
 .pagination button { width: 36px; height: 36px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--border); color: var(--fg); display: flex; align-items: center; justify-content: center; transition: background .12s; }
 .pagination button:hover:not(:disabled) { background: var(--surface3); }
 .page-info { font-size: 13px; color: var(--muted); font-family: 'Inter', sans-serif; padding: 0 8px; }
+.load-more-section { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 18px; }
+.load-more-button { min-width: 148px; justify-content: center; }
+.load-more-button[hidden] { display: none; }
+.load-more-button:disabled { cursor: wait; opacity: .7; }
 
 /* ─── Skeletons ──────────────────────────────────────────────────────────── */
 .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 14px; }
@@ -234,6 +238,35 @@ html { scroll-padding-top: calc(var(--topbar) + 16px); }
 .skeleton-poster { aspect-ratio: 2/3; background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 .skeleton-line { height: 11px; background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; margin: 10px 10px 4px; }
 .skeleton-line.short { width: 55%; margin-bottom: 10px; }
+
+/* Hero skeleton — mirrors the featured banner so the layout doesn't jump */
+.skeleton-hero .hero-slide { pointer-events: none; }
+.skeleton-hero .skeleton-hero-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+.skeleton-hero .skeleton-block {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255,255,255,.07) 25%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.07) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+.skeleton-hero .skeleton-pill { width: 96px; height: 22px; border-radius: 999px; }
+.skeleton-hero .skeleton-pill.short { width: 62px; }
+.skeleton-hero .skeleton-hero-title { width: min(82%, 470px); height: clamp(30px, 4vw, 50px); border-radius: 10px; }
+.skeleton-hero .skeleton-hero-title.short { width: min(54%, 320px); }
+.skeleton-hero .skeleton-meta { width: 120px; height: 13px; }
+.skeleton-hero .skeleton-meta.short { width: 82px; }
+.skeleton-hero .skeleton-desc { width: min(92%, 520px); height: 13px; }
+.skeleton-hero .skeleton-desc.short { width: min(64%, 360px); }
+.skeleton-hero .skeleton-btn { width: 132px; height: 44px; border-radius: 999px; }
+.skeleton-hero .skeleton-btn.small { width: 96px; }
+.skeleton-hero .hero-badges,
+.skeleton-hero .hero-meta,
+.skeleton-hero .hero-actions { display: flex; align-items: center; gap: 10px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ─── Empty / notice ─────────────────────────────────────────────────────── */
