@@ -1,0 +1,57 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "aftershow-lead",
+  "permissions": [
+    {
+      "action": "shell",
+      "resource": "git *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "git status *",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "git diff *",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "git log *",
+      "effect": "allow"
+    },
+    {
+      "action": "shell",
+      "resource": "git show *",
+      "effect": "allow"
+    }
+  ],
+  "agents": {
+    "aftershow-lead": {
+      "permissions": [
+        {
+          "action": "subagent",
+          "resource": "aftershow-ui",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "aftershow-api",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "aftershow-data",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "aftershow-review",
+          "effect": "allow"
+        }
+      ]
+    }
+  }
+}

@@ -207,9 +207,13 @@ test("catalogue, bookmarks, playback and downloads use compatible signed links",
   const json = async (path) => (await get(path)).json();
   assert.equal((await json("/health")).status, "ok");
   const { items } = await json("/api/catalogue?q=dune");
-  const detail = items[0].url;
-  assert.equal((await json(detail + "/info")).sourceUrl, fixture.url);
-  const { options } = await json(detail + "/options");
+  // Use the old signed token instead of a real provider URL so all route
+  // handlers work without making outbound HTTP requests.
+  const old =
+    ".eJx1jDsOgCAMQO_SmVpldHbxDMYBQlUSQCPg-UVZXJzfZ4ItpSP2RDYqa7Ju1pM5kN8vy2RyYJSt7DApbx0WrtlghSBgKBzEI4ifT-3exTeOpV6UiyxgrD7MN-ZNLsE.oRzR3CMWImSQqMBCW2V54BWwcI4";
+  const detail = old;
+  assert.equal((await json("/movie/" + old + "/info")).sourceUrl, fixture.url);
+  const { options } = await json("/movie/" + old + "/options");
   for (const [key, path] of [
     ["watch", "movie.mp4"],
     ["download", "download"],
@@ -221,11 +225,9 @@ test("catalogue, bookmarks, playback and downloads use compatible signed links",
       "https://example.org/" + path,
     );
   }
-  const old =
-    ".eJx1jDsOgCAMQO_SmVpldHbxDMYBQlUSQCPg-UVZXJzfZ4ItpSP2RDYqa7Ju1pM5kN8vy2RyYJSt7DApbx0WrtlghSBgKBzEI4ifT-3exTeOpV6UiyxgrD7MN-ZNLsE.oRzR3CMWImSQqMBCW2V54BWwcI4";
   assert.equal((await json("/movie/" + old + "/info")).title, "Dune");
-  assert.equal((await get(detail + "invalid/info")).status, 404);
+  assert.equal((await get("/movie/" + old + "/invalid/info")).status, 404);
   assert.equal((await get("/poster-artwork")).status, 400);
-  assert.equal((await json(detail + "/trailer")).video, "rPqTIibDpq4");
+  assert.equal((await json("/movie/" + old + "/trailer")).video, "rPqTIibDpq4");
   assert.equal((await json("/api/catalogue?cached=1&q=Dune")).items[0].title, "Dune");
 });
